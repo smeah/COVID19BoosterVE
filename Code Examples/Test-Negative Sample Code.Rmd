@@ -1,0 +1,195 @@
+---
+title: "Code Demo"
+author: "Sabir Meah"
+date: "2023-05-25"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(survival)
+library(MatchIt)
+```
+
+# Data Generation
+
+We generate a sample of 1,000 tests to use for the generation. Variables include an indicator for booster status, an indicator for test result, and three covariates: one continuous, one categorical, and one binary.
+
+```{r}
+set.seed(612421)
+
+data <- cbind.data.frame(
+  Booster = as.factor(sample(c(0, 1), size = 1000, prob = c(0.5, 0.5), replace = TRUE)), # Indicator for if individual received booster or not (0 no, 1 yes)
+  Test_Result = as.factor(sample(c(0, 1), size = 1000, prob = c(0.8, 0.2), replace = TRUE)), # Indicator for PCR test result (0 negative, 1 positive)
+  Covariate_Continuous = runif(n = 1000, min = 0, max = 50), # Continuous covariate ranging between 0 and 50
+  Covariate_Categorical = as.factor(sample(c("A", "B", "C", "D", "E"), size = 1000, prob = rep(0.2, 5), replace = TRUE)), # Categorical covariate with 5 levels
+  Covariate_Binary = as.factor(sample(c(0, 1), size = 1000, prob = c(0.5, 0.5), replace = TRUE)) # Binary covariate
+)
+```
+
+# Models Without Matching or Propensity Scores
+
+## Models
+
+### Unadjusted Model
+
+```{r}
+mod_unadj <- glm(Test_Result ~ Booster, family = "binomial", data = data)
+summary(mod_unadj)
+paste("VE =", 1 - exp(coef(mod_unadj)["Booster1"]))
+```
+
+### Adjusted Model
+
+```{r}
+mod_adj <- glm(Test_Result ~ Booster + Covariate_Continuous + Covariate_Categorical + Covariate_Binary, family = "binomial", data = data)
+summary(mod_adj)
+paste("VE =", 1 - exp(coef(mod_adj)["Booster1"]))
+```
+
+# Exact Matching
+
+## Match Generation
+
+This dataframe will be used for the propensity score adjustment and IPW models.
+
+```{r}
+# Binning continuous covariate
+# Can be done along any division of your choosing, specify cutpoints with 'breaks' argument
+data <- data %>%
+  mutate(Covariate_Continuous_Binned = cut(Covariate_Continuous, breaks = seq(0, 50, by = 10)))
+```
+
+This dataframe will be used for just the propensity score caliper matching model.
+
+```{r}
+# Generate exact matches
+# Make sure to use the binned version of the continuous covariate
+data_exact_match <- matchit(Booster ~ Covariate_Continuous_Binned + Covariate_Categorical + Covariate_Binary, 
+                             data = data, 
+                             method = "exact") %>%
+  match.data() # This function call is necessary for a dataframe to be output
+# Matching strata of observations are denoted by new 'subclass' column in dataframe
+```
+
+## Matched Models
+
+### Unconditional Logisitic Regression
+
+```{r}
+mod_exact_lr <- glm(Test_Result ~ Booster, family = "binomial", data = data_exact_match)
+summary(mod_exact_lr)
+paste("VE =", 1 - exp(coef(mod_exact_lr)["Booster1"]))
+```
+
+### Conditional Logistic Regression
+
+```{r}
+# 'clogit()' requires a numeric or logical outcome variable
+# Given that we stored 'Test_Result' as a factor, we coerce it to a numeric variable
+mod_exact_clr <- clogit(as.numeric(Test_Result) ~ Booster + strata(subclass), data = data_exact_match)
+summary(mod_exact_clr)
+paste("VE =", 1 - exp(coef(mod_exact_clr)["Booster1"]))
+```
+
+# Propensity Score Models
+
+## Propensity Score Generation
+
+```{r}
+# Logisitic model generating propensity score by predicting exposure (vaccination)
+propensity_boosting_mod <- glm(Booster ~ Covariate_Continuous_Binned + Covariate_Categorical + Covariate_Binary, 
+                               data = data, 
+                               family = "binomial")
+```
+
+```{r}
+# Data with propensity score and IPW weights as additional columns
+data_propensity <- data %>%
+  mutate(Propensity_ForBooster = predict(propensity_boosting_mod, type = "response")) %>% # Propensity for receiving booster column
+  mutate(IPW_ForBooster = ifelse(Booster == 1, yes = 1 / Propensity_ForBooster, no = 1 / (1 - Propensity_ForBooster))) # IPW for receiving booster column
+```
+
+## Propensity Score Matching (with Caliper)
+
+```{r}
+# Generate nearest neighbor propensity score matches
+# Using binned version of the continuous covariate is optional
+data_prop_match <- matchit(Booster ~ Covariate_Continuous + Covariate_Categorical + Covariate_Binary, 
+                             data = data, 
+                             method = "nearest", # Specify nearest neighbor matching, can also use optimal matching but takes much longer
+                             distance = "glm",
+                             caliper = 0.2, # Specify caliper of 0.2
+                             std.caliper = TRUE) %>% # Specify that caliper is based on standard deviation of propensity scores
+  match.data() %>% # This function call is necessary for a dataframe to be output\
+  mutate(ipw = ifelse(Booster == 1, yes = 1 / distance, no = 1 / (1 - distance))) # Can also generate IPW
+# Matching strata of observations are denoted by new 'subclass' column in dataframe
+```
+
+### Propensity Score Matched Models
+
+#### Unconditional Logistic Regression
+
+```{r}
+mod_prop_match_lr <- glm(Test_Result ~ Booster, family = "binomial", data = data_prop_match)
+summary(mod_prop_match_lr)
+paste("VE =", 1 - exp(coef(mod_prop_match_lr)["Booster1"]))
+```
+
+#### Conditional Logistic Regression
+
+```{r}
+# 'clogit()' requires a numeric or logical outcome variable
+# Given that we stored 'Test_Result' as a factor, we coerce it to a numeric variable
+mod_prop_match_clr <- clogit(as.numeric(Test_Result) ~ Booster + strata(subclass), data = data_prop_match)
+summary(mod_prop_match_clr)
+paste("VE =", 1 - exp(coef(mod_prop_match_clr)["Booster1"]))
+```
+
+### Propensity Score Adjustment Models
+
+#### No Direct Model Adjustment
+
+```{r}
+# Same model as unadjusted model, but include propensity score as a term
+mod_prop_adj_lr <- glm(Test_Result ~ Booster + Propensity_ForBooster, family = "binomial", data = data_propensity)
+summary(mod_prop_adj_lr)
+paste("VE =", 1 - exp(coef(mod_prop_adj_lr)["Booster1"]))
+```
+
+#### Direct Model Adjustment
+
+```{r}
+# Include terms used to generate propensity score as covariates in VE model as well
+# Same model as adjusted model, but include propensity score as a term
+mod_prop_adj_direct_lr <- glm(Test_Result ~ Booster + Propensity_ForBooster + Covariate_Continuous + Covariate_Categorical + Covariate_Binary, family = "binomial", data = data_propensity)
+summary(mod_prop_adj_direct_lr)
+paste("VE =", 1 - exp(coef(mod_prop_adj_direct_lr)["Booster1"]))
+```
+
+### Inverse Probability Weighting Models
+
+#### No Direct Model Adjustment
+
+```{r}
+# Same model as unadjusted model, but include weights argument
+mod_prop_ipw_lr <- glm(Test_Result ~ Booster, family = "binomial", weights = IPW_ForBooster, data = data_propensity)
+summary(mod_prop_ipw_lr)
+paste("VE =", 1 - exp(coef(mod_prop_ipw_lr)["Booster1"]))
+```
+
+#### Direct Model Adjustment
+
+```{r}
+# Same model as adjusted model, but include weights argument
+mod_prop_ipw_direct_lr <- glm(Test_Result ~ Booster + Covariate_Continuous + Covariate_Categorical + Covariate_Binary, family = "binomial", weights = IPW_ForBooster, data = data_propensity)
+summary(mod_prop_ipw_direct_lr)
+paste("VE =", 1 - exp(coef(mod_prop_ipw_direct_lr)["Booster1"]))
+```
+
+
+
