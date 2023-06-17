@@ -1,7 +1,7 @@
 ---
-title: "Test-Negative Code Demo"
+title: "Cohort Code Demo"
 author: "Sabir Meah"
-date: "2023-05-25"
+date: "2023-06-13"
 output: pdf_document
 ---
 
@@ -12,33 +12,69 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 library(tidyverse)
 library(survival)
+library(survminer)
 library(MatchIt)
 ```
 
 # Data Generation
 
-We generate a sample of 1,000 tests to use for the generation. Variables include an indicator for booster status, an indicator for test result, and three covariates: one continuous, one categorical, and one binary.
+We generate a sample of 1,000 tests to use for the generation. Variables include an indicator for booster status, an indicator for infection during period, and three covariates: one continuous, one categorical, and one binary.
 
 ```{r}
 set.seed(612421) # Set a seed for reproducibility
 
 data <- cbind.data.frame(
   Booster = as.factor(sample(c(0, 1), size = 1000, prob = c(0.5, 0.5), replace = TRUE)), # Indicator for if individual received booster or not (0 no, 1 yes)
-  Test_Result = as.factor(sample(c(0, 1), size = 1000, prob = c(0.8, 0.2), replace = TRUE)), # Indicator for PCR test result (0 negative, 1 positive)
+  Infection = sample(c(0, 1), size = 1000, prob = c(0.8, 0.2), replace = TRUE), # Indicator for infection during study period (0 no, 1 yes)
   Covariate_Continuous = runif(n = 1000, min = 0, max = 50), # Continuous covariate ranging between 0 and 50
   Covariate_Categorical = as.factor(sample(c("A", "B", "C", "D", "E"), size = 1000, prob = rep(0.2, 5), replace = TRUE)), # Categorical covariate with 5 levels
   Covariate_Binary = as.factor(sample(c(0, 1), size = 1000, prob = c(0.5, 0.5), replace = TRUE)) # Binary covariate
 )
 ```
 
+We also create a survival time (days under observation before an infection or censoring event) variable in days.  We use a data generating mechamism that gives a 20% probability of infection, and a uniformly random day of infection within the 30 day study period.  For uninfected individuals, we have an 80% probability of censoring at the end of the 30 day study period, and a 20% probability of censoring before the end of the study at a uniformly random day within the 30 day study period.
+
+```{r}
+set.seed(612421) # Set a seed for reproducibility
+
+study_length <- 30 # Set 30 day total study period
+
+Survival_Time <- rep(NA_real_, nrow(data))
+for(i in 1:nrow(data)){
+  rand_day = sample(1:study_length, size = 1) # Draw a random day
+  if(data[i,]$Infection == 1){ # If subject was infected
+    Survival_Time[i] <- rand_day # Use random day as the day of the event
+  } else {
+    if(runif(n = 1, min = 0, max = 1) > 0.8){ # If subject was uninfected, give 80% chance of end of study censoring
+      Survival_Time[i] <- rand_day # And 20% change of censoring during study, where we sett it as the random day
+    } else {
+      Survival_Time[i] <- study_length
+    }
+  }
+}
+
+data <- data %>%
+  mutate(Survival_Time = Survival_Time)
+```
+
 # Models Without Matching or Propensity Scores
 
 ## Models
 
+### Kaplan-Meier Curve
+
+```{r}
+ggsurvplot(survfit(Surv(time = Survival_Time, event = Infection) ~ Booster, data = data),
+           data = data,
+           conf.int = TRUE,
+           fun = "cumhaz")
+```
+
+
 ### Unadjusted Model
 
 ```{r}
-mod_unadj <- glm(Test_Result ~ Booster, family = "binomial", data = data)
+mod_unadj <- coxph(Surv(time = Survival_Time, event = Infection) ~ Booster, data = data)
 summary(mod_unadj)
 paste("VE =", 1 - exp(coef(mod_unadj)["Booster1"]))
 ```
@@ -46,7 +82,7 @@ paste("VE =", 1 - exp(coef(mod_unadj)["Booster1"]))
 ### Adjusted Model
 
 ```{r}
-mod_adj <- glm(Test_Result ~ Booster + Covariate_Continuous + Covariate_Categorical + Covariate_Binary, family = "binomial", data = data)
+mod_adj <- coxph(Surv(time = Survival_Time, event = Infection) ~ Booster + Covariate_Continuous + Covariate_Categorical + Covariate_Binary, data = data)
 summary(mod_adj)
 paste("VE =", 1 - exp(coef(mod_adj)["Booster1"]))
 ```
@@ -78,22 +114,20 @@ data_exact_match <- matchit(Booster ~ Covariate_Continuous_Binned + Covariate_Ca
 
 ## Matched Models
 
-### Unconditional Logisitic Regression
+### Unstratified Cox Regression
 
 ```{r}
-mod_exact_lr <- glm(Test_Result ~ Booster, family = "binomial", data = data_exact_match)
-summary(mod_exact_lr)
-paste("VE =", 1 - exp(coef(mod_exact_lr)["Booster1"]))
+mod_exact <- coxph(Surv(time = Survival_Time, event = Infection) ~ Booster, data = data_exact_match)
+summary(mod_exact)
+paste("VE =", 1 - exp(coef(mod_exact)["Booster1"]))
 ```
 
-### Conditional Logistic Regression
+### Stratified Cox Regression
 
 ```{r}
-# 'clogit()' requires a numeric or logical outcome variable
-# Given that we stored 'Test_Result' as a factor, we coerce it to a numeric variable
-mod_exact_clr <- clogit(as.numeric(Test_Result) ~ Booster + strata(subclass), data = data_exact_match)
-summary(mod_exact_clr)
-paste("VE =", 1 - exp(coef(mod_exact_clr)["Booster1"]))
+mod_exact_strat <- coxph(Surv(time = Survival_Time, event = Infection) ~ Booster + strata(subclass), data = data_exact_match)
+summary(mod_exact_strat)
+paste("VE =", 1 - exp(coef(mod_exact_strat)["Booster1"]))
 ```
 
 # Propensity Score Models
@@ -132,22 +166,20 @@ data_prop_match <- matchit(Booster ~ Covariate_Continuous + Covariate_Categorica
 
 ### Propensity Score Matched Models
 
-#### Unconditional Logistic Regression
+#### Unstratified Cox Regression
 
 ```{r}
-mod_prop_match_lr <- glm(Test_Result ~ Booster, family = "binomial", data = data_prop_match)
-summary(mod_prop_match_lr)
-paste("VE =", 1 - exp(coef(mod_prop_match_lr)["Booster1"]))
+mod_prop_match <- coxph(Surv(time = Survival_Time, event = Infection) ~ Booster, data = data_prop_match)
+summary(mod_prop_match)
+paste("VE =", 1 - exp(coef(mod_prop_match)["Booster1"]))
 ```
 
-#### Conditional Logistic Regression
+#### Stratified Cox Regression
 
 ```{r}
-# 'clogit()' requires a numeric or logical outcome variable
-# Given that we stored 'Test_Result' as a factor, we coerce it to a numeric variable
-mod_prop_match_clr <- clogit(as.numeric(Test_Result) ~ Booster + strata(subclass), data = data_prop_match)
-summary(mod_prop_match_clr)
-paste("VE =", 1 - exp(coef(mod_prop_match_clr)["Booster1"]))
+mod_prop_match_strat <- coxph(Surv(time = Survival_Time, event = Infection) ~ Booster + strata(subclass), data = data_prop_match)
+summary(mod_prop_match_strat)
+paste("VE =", 1 - exp(coef(mod_prop_match_strat)["Booster1"]))
 ```
 
 ### Propensity Score Adjustment Models
@@ -156,9 +188,9 @@ paste("VE =", 1 - exp(coef(mod_prop_match_clr)["Booster1"]))
 
 ```{r}
 # Same model as unadjusted model, but include propensity score as a term
-mod_prop_adj_lr <- glm(Test_Result ~ Booster + Propensity_ForBooster, family = "binomial", data = data_propensity)
-summary(mod_prop_adj_lr)
-paste("VE =", 1 - exp(coef(mod_prop_adj_lr)["Booster1"]))
+mod_prop_adj <- coxph(Surv(time = Survival_Time, event = Infection) ~ Booster + Propensity_ForBooster, data = data_propensity)
+summary(mod_prop_adj)
+paste("VE =", 1 - exp(coef(mod_prop_adj)["Booster1"]))
 ```
 
 #### Direct Model Adjustment
@@ -166,9 +198,9 @@ paste("VE =", 1 - exp(coef(mod_prop_adj_lr)["Booster1"]))
 ```{r}
 # Include terms used to generate propensity score as covariates in VE model as well
 # Same model as adjusted model, but include propensity score as a term
-mod_prop_adj_direct_lr <- glm(Test_Result ~ Booster + Propensity_ForBooster + Covariate_Continuous + Covariate_Categorical + Covariate_Binary, family = "binomial", data = data_propensity)
-summary(mod_prop_adj_direct_lr)
-paste("VE =", 1 - exp(coef(mod_prop_adj_direct_lr)["Booster1"]))
+mod_prop_adj_direct <- coxph(Surv(time = Survival_Time, event = Infection) ~ Booster + Propensity_ForBooster + Covariate_Continuous + Covariate_Categorical + Covariate_Binary, data = data_propensity)
+summary(mod_prop_adj_direct)
+paste("VE =", 1 - exp(coef(mod_prop_adj_direct)["Booster1"]))
 ```
 
 ### Inverse Probability Weighting Models
@@ -177,19 +209,22 @@ paste("VE =", 1 - exp(coef(mod_prop_adj_direct_lr)["Booster1"]))
 
 ```{r}
 # Same model as unadjusted model, but include weights argument
-mod_prop_ipw_lr <- glm(Test_Result ~ Booster, family = "binomial", weights = IPW_ForBooster, data = data_propensity)
-summary(mod_prop_ipw_lr)
-paste("VE =", 1 - exp(coef(mod_prop_ipw_lr)["Booster1"]))
+mod_prop_ipw <- coxph(Surv(time = Survival_Time, event = Infection) ~ Booster, weights = IPW_ForBooster, data = data_propensity)
+summary(mod_prop_ipw)
+paste("VE =", 1 - exp(coef(mod_prop_ipw)["Booster1"]))
 ```
 
 #### Direct Model Adjustment
 
 ```{r}
 # Same model as adjusted model, but include weights argument
-mod_prop_ipw_direct_lr <- glm(Test_Result ~ Booster + Covariate_Continuous + Covariate_Categorical + Covariate_Binary, family = "binomial", weights = IPW_ForBooster, data = data_propensity)
-summary(mod_prop_ipw_direct_lr)
-paste("VE =", 1 - exp(coef(mod_prop_ipw_direct_lr)["Booster1"]))
+mod_prop_ipw_direct <- coxph(Surv(time = Survival_Time, event = Infection) ~ Booster + Covariate_Continuous + Covariate_Categorical + Covariate_Binary, weights = IPW_ForBooster, data = data_propensity)
+summary(mod_prop_ipw_direct)
+paste("VE =", 1 - exp(coef(mod_prop_ipw_direct)["Booster1"]))
 ```
+
+
+
 
 
 
