@@ -1,0 +1,2468 @@
+---
+title: "Booster Effectiveness Forest Plots"
+author: "Sabir Meah"
+date: "6/27/2022"
+output:
+  pdf_document
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(forestplot)
+library(ggplotify)
+library(patchwork)
+knitr::opts_chunk$set(fig.width=14, fig.height=8) 
+```
+
+```{r}
+Booster1 <- read.csv("1Booster Unstratified Forest Plot.csv")
+Booster2 <- read.csv("2Booster Forest Plot.csv")
+Booster1Week2 <- read.csv("1Booster 2Week Forest Plot.csv")
+Booster1Month1 <- read.csv("1Booster 1Month Forest Plot.csv")
+Booster1Month2 <- read.csv("1Booster 2Month Forest Plot.csv")
+Booster1Month3 <- read.csv("1Booster 3Month Forest Plot.csv")
+Bivalent <- read.csv("Bivalent Forest Plot.csv")
+```
+
+```{r}
+# Old function with only CI
+CI_generator <- function(center, lower, upper){
+  CI <- rep(0, length(center))
+  for(i in 1:length(center)){
+    CI[i] <- paste0("(", 
+                    format(round(lower[i], 2), nsmall = 2), 
+                    ",", 
+                    format(round(upper[i], 2), nsmall = 2), 
+                    ")")
+  }
+  return(CI)
+}
+
+# New function with VE and CI
+CI_generator <- function(center, lower, upper){
+  CI <- rep(0, length(center))
+  for(i in 1:length(center)){
+    CI[i] <- paste0(format(round(center[i], 2), nsmall = 2),
+                    "  ",
+                    "(", 
+                    format(round(lower[i], 2), nsmall = 2), 
+                    ", ", 
+                    format(round(upper[i], 2), nsmall = 2), 
+                    ")")
+  }
+  return(CI)
+}
+```
+
+
+```{r, fig.width=18, fig.height=8, include = FALSE, eval = FALSE}
+CI <- CI_generator(Booster1$InfectionVE, Booster1$InfectionCI_Lower, Booster1$InfectionCI_Upper)
+Booster1_plot <- tibble(mean  = Booster1$InfectionVE, 
+                        lower = Booster1$InfectionCI_Lower,
+                        upper = Booster1$InfectionCI_Upper,
+                        study = as.character(Booster1$Study),
+                        VE    = as.character(format(round(Booster1$InfectionVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster1$Design,
+                        country = Booster1$Country,
+                        primary = Booster1$PrimarySeries,
+                        boost = Booster1$Booster)
+header <- tibble(study = "Study",
+                 VE = "VE",
+                 CI = "95% CI",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+forestplot(Booster1_plot, 
+           labeltext = c(study, country, primary, boost, design, VE, CI), 
+           title = "1st Booster VE Against Infection (In Studies Unstratified by Time Since Booster)",
+           graph.pos = 6,
+           boxsize = .2,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(-.25, 0, 0.25, 0.5, 0.75, 1),
+           clip = c(-.25, 1),
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"))
+```
+
+```{r}
+#pal <- RColorBrewer::brewer.pal(3, "Set1")
+pal <- c("blue", "red", "#009b00")
+#pal <- c("#1a53ff", "#7c1158", "#b30000")
+#pal <- c("#0072B2", "#D55E00", "#009E73")
+```
+
+
+
+# VE Unstratified by Time Since Vaccination
+
+## Infection
+
+```{r, include = FALSE}
+ggplot(Booster1, aes(x = InfectionVE, y = Study, xmin = InfectionCI_Lower, xmax = InfectionCI_Upper)) +
+  geom_point() +
+  geom_errorbarh(height = 0.65) +
+  xlim(0,1) +
+  labs(title = "1st Booster VE Against Infection",
+       x = "Vaccine Effectiveness Against Infection")
+```
+
+```{r, fig.width=18, fig.height=14}
+pdf("./Figures/Booster1_Infection.pdf", width = 14, height = 18, onefile = FALSE)
+
+Booster1_Infection <- drop_na(Booster1, InfectionVE)
+CI <- CI_generator(Booster1_Infection$InfectionVE, Booster1_Infection$InfectionCI_Lower, Booster1_Infection$InfectionCI_Upper)
+
+variant_num <- c(as.character(min(grep("2022", Booster1_Infection$End)) + 1))
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster1_Infection$InfectionVE, 
+                        lower = Booster1_Infection$InfectionCI_Lower,
+                        upper = Booster1_Infection$InfectionCI_Upper,
+                        study = as.character(Booster1_Infection$Study),
+                        VE    = as.character(format(round(Booster1_Infection$InfectionVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster1_Infection$Design,
+                        country = Booster1_Infection$Country, 
+                        primary = Booster1_Infection$PrimarySeries,
+                        boost = Booster1_Infection$Booster)
+
+Booster1_plot <- rbind.data.frame(
+  c(" ", rep(NA, ncol(Booster1_plot) - 1)),
+  Booster1_plot[1:(min(grep("2022", Booster1_Infection$End))-1),],
+  c(" ", rep(NA, ncol(Booster1_plot) - 1)),
+  Booster1_plot[-(1:(min(grep("2022", Booster1_Infection$End)))),]
+)
+
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+plot.new()
+forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Infection (In Studies Unstratified by Time Since Booster)",
+           title = "",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .20,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(-.25, 0, 0.25, 0.5, 0.75, 1),
+           clip = c(-.25, 1),
+           #hrzl_lines = variant_list,
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+  fp_set_zebra_style("#EFEFEF")
+legend(x = 0.48, y = 1.08, c("mRNA", "non-mRNA", "Multiple"), title = "Primary Series", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+dev.off()
+```
+
+```{r, include = FALSE, eval = FALSE}
+ggplot(drop_na(Booster1, HospitalVE), 
+       aes(x = HospitalVE, y = Study, xmin = HospitalCI_Lower, xmax = HospitalCI_Upper)) +
+  geom_point() +
+  geom_errorbarh(height = 0.5) +
+  xlim(0,1) +
+  labs(title = "1st Booster VE Against Hospitalization",
+       x = "Vaccine Effectiveness Against Hospitalization")
+```
+
+## Hospitalization
+
+```{r}
+pdf("./Figures/Booster1_Hospital.pdf", width = 14, height = 8, onefile = FALSE)
+
+Booster1_Hospital <- drop_na(Booster1, HospitalVE)
+CI <- CI_generator(Booster1_Hospital$HospitalVE, Booster1_Hospital$HospitalCI_Lower, Booster1_Hospital$HospitalCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster1_Hospital$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster1_Hospital$HospitalVE, 
+                        lower = Booster1_Hospital$HospitalCI_Lower,
+                        upper = Booster1_Hospital$HospitalCI_Upper,
+                        study = as.character(Booster1_Hospital$Study),
+                        VE    = as.character(format(round(Booster1_Hospital$HospitalVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster1_Hospital$Design,
+                        country = Booster1_Hospital$Country,
+                        primary = Booster1_Hospital$PrimarySeries,
+                        boost = Booster1_Hospital$Booster)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+plot.new()
+forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Hospitalization/Severe Disease (In Studies Unstratified by Time Since Booster)",
+           title = "",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .2,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(-.25, 0, 0.25, 0.5, 0.75, 1),
+           clip = c(-.25, 1),
+           hrzl_lines = variant_list,
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+legend(x = 0.5, y = 1.155, c("mRNA", "non-mRNA", "Multiple"), title = "Primary Series", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+dev.off()
+```
+
+```{r, include = FALSE, eval = FALSE}
+ggplot(drop_na(Booster2, InfectionVE),
+       aes(x = InfectionVE, y = Study, xmin = InfectionCI_Lower, xmax = InfectionCI_Upper)) +
+  geom_point() +
+  geom_errorbarh(height = 0.25) +
+  xlim(-0.1,1) +
+  labs(title = "2nd Booster VE Against Infection (In Studies Unstratified by Time Since Booster)",
+       x = "Vaccine Effectiveness Against Infection")
+```
+
+## Death
+
+```{r}
+pdf("./Figures/Booster1_Death.pdf", width = 14, height = 6, onefile = FALSE)
+
+Booster1_Death <- drop_na(Booster1, DeathVE)
+CI <- CI_generator(Booster1_Death$DeathVE, Booster1_Death$DeathCI_Lower, Booster1_Death$DeathCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster1_Death$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster1_Death$DeathVE, 
+                        lower = Booster1_Death$DeathCI_Lower,
+                        upper = Booster1_Death$DeathCI_Upper,
+                        study = as.character(Booster1_Death$Study),
+                        VE    = as.character(format(round(Booster1_Death$DeathVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster1_Death$Design,
+                        country = Booster1_Death$Country,
+                        primary = Booster1_Death$PrimarySeries,
+                        boost = Booster1_Death$Booster)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+plot.new()
+forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Mortality (In Studies Unstratified by Time Since Booster)",
+           title = "",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .15,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(0, 0.25, 0.5, 0.75, 1),
+           hrzl_lines = variant_list,
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+legend(x = 0.5, y = 1.225, c("mRNA", "non-mRNA", "Multiple"), title = "Primary Series", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+dev.off()
+```
+
+## Multipanel Severe Disease
+
+```{r}
+Booster1_Hospital <- drop_na(Booster1, HospitalVE)
+CI <- CI_generator(Booster1_Hospital$HospitalVE, Booster1_Hospital$HospitalCI_Lower, Booster1_Hospital$HospitalCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster1_Hospital$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster1_Hospital$HospitalVE, 
+                        lower = Booster1_Hospital$HospitalCI_Lower,
+                        upper = Booster1_Hospital$HospitalCI_Upper,
+                        study = as.character(Booster1_Hospital$Study),
+                        VE    = as.character(format(round(Booster1_Hospital$HospitalVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster1_Hospital$Design,
+                        country = Booster1_Hospital$Country,
+                        primary = Booster1_Hospital$PrimarySeries,
+                        boost = Booster1_Hospital$Booster)
+
+Booster1_plot <- rbind.data.frame(
+  c(" ", rep(NA, ncol(Booster1_plot) - 1)),
+  Booster1_plot[1:(min(grep("2022", Booster1_Hospital$End))-1),],
+  c(" ", rep(NA, ncol(Booster1_plot) - 1)),
+  Booster1_plot[-(1:(min(grep("2022", Booster1_Hospital$End)))),]
+)
+
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+fig_hosp <- forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Hospitalization/Severe Disease (In Studies Unstratified by Time Since Booster)",
+           #title = "",
+           title = "Hospitalization/Severe Disease                                                                                                                                                                 ",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .2,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(-.25, 0, 0.25, 0.5, 0.75, 1),
+           clip = c(-.25, 1),
+           #hrzl_lines = variant_list,
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+
+###
+
+Booster1_Death <- drop_na(Booster1, DeathVE)
+CI <- CI_generator(Booster1_Death$DeathVE, Booster1_Death$DeathCI_Lower, Booster1_Death$DeathCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster1_Death$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster1_Death$DeathVE, 
+                        lower = Booster1_Death$DeathCI_Lower,
+                        upper = Booster1_Death$DeathCI_Upper,
+                        study = as.character(Booster1_Death$Study),
+                        VE    = as.character(format(round(Booster1_Death$DeathVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster1_Death$Design,
+                        country = Booster1_Death$Country,
+                        primary = Booster1_Death$PrimarySeries,
+                        boost = Booster1_Death$Booster)
+
+Booster1_plot <- rbind.data.frame(
+  c(" ", rep(NA, ncol(Booster1_plot) - 1)),
+  Booster1_plot[1:(min(grep("2022", Booster1_Death$End))-1),],
+  c(" ", rep(NA, ncol(Booster1_plot) - 1)),
+  Booster1_plot[-(1:(min(grep("2022", Booster1_Death$End)))),]
+)
+
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+fig_death <- forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Mortality (In Studies Unstratified by Time Since Booster)",
+           #title = "",
+           title = "Mortality                                                                                                                                                                                                    ",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .15,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(-0.25, 0, 0.25, 0.5, 0.75, 1),
+           #hrzl_lines = variant_list,
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+
+p1 <- grid2grob(print(fig_hosp))
+p2 <- grid2grob(print(fig_death))
+p_both <- wrap_plots(p1, p2, nrow = 2, heights = c(10,6))
+
+pdf("./Figures/Booster1_Severe_Multipanel.pdf", width = 14, height = 16, onefile = FALSE)
+
+plot.new()
+p_both
+legend(x = .5, y = 1.09, c("mRNA", "non-mRNA", "Multiple"), title = "Primary Series", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+dev.off()
+```
+
+
+# 2nd Booster
+
+### Infection
+
+```{r}
+pdf("./Figures/Booster2_Infection.pdf", width = 14, height = 6, onefile = FALSE)
+
+Booster2_Infection <- drop_na(Booster2, InfectionVE)
+CI <- CI_generator(Booster2_Infection$InfectionVE, Booster2_Infection$InfectionCI_Lower, Booster2_Infection$InfectionCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster2_Infection$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster2_Infection$InfectionVE, 
+                        lower = Booster2_Infection$InfectionCI_Lower,
+                        upper = Booster2_Infection$InfectionCI_Upper,
+                        study = as.character(Booster2_Infection$Study),
+                        VE    = as.character(format(round(Booster2_Infection$InfectionVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster2_Infection$Design,
+                        country = Booster2_Infection$Country,
+                        boost1 = Booster2_Infection$Booster1,
+                        boost2 = Booster2_Infection$Booster2)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$boost1 == "mRNA" ~ pal[1], Booster1_plot$boost1 == "non-mRNA" ~ pal[2], Booster1_plot$boost1 == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$boost1 == "mRNA" ~ pal[1], Booster1_plot$boost1 == "non-mRNA" ~ pal[2], Booster1_plot$boost1 == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 boost1 = "Booster 1",
+                 boost2 = "Booster 2")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+plot.new()
+forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "2nd Booster vs. 1st Booster VE Against Infection (In Studies Unstratified by Time Since Booster)",
+           title = "",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .2,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(-0.25, 0, 0.25, 0.5, 0.75, 1),
+           #hrzl_lines = variant_list, # No observations above line
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+legend(x = 0.5, y = 1.225, c("mRNA", "non-mRNA", "Multiple"), title = "First Booster", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+dev.off()
+```
+
+```{r, include = FALSE, eval = FALSE}
+ggplot(drop_na(Booster2, HospitalVE), 
+       aes(x = HospitalVE, y = Study, xmin = HospitalCI_Lower, xmax = HospitalCI_Upper)) +
+  geom_point() +
+  geom_errorbarh(height = 0.25) +
+  xlim(0,1) +
+  labs(title = "2nd Booster VE Against Hospitalization (In Studies Unstratified by Time Since Booster)",
+       x = "Vaccine Effectiveness Against Hospitalization")
+```
+
+### Hospitalization
+
+```{r}
+pdf("./Figures/Booster2_Hospital.pdf", width = 14, height = 6, onefile = FALSE)
+
+Booster2_Hospital <- drop_na(Booster2, HospitalVE)
+CI <- CI_generator(Booster2_Hospital$HospitalVE, Booster2_Hospital$HospitalCI_Lower, Booster2_Hospital$HospitalCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster2_Hospital$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster2_Hospital$HospitalVE, 
+                        lower = Booster2_Hospital$HospitalCI_Lower,
+                        upper = Booster2_Hospital$HospitalCI_Upper,
+                        study = as.character(Booster2_Hospital$Study),
+                        VE    = as.character(format(round(Booster2_Hospital$HospitalVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster2_Hospital$Design,
+                        country = Booster2_Hospital$Country,
+                        boost1 = Booster2_Hospital$Booster1,
+                        boost2 = Booster2_Hospital$Booster2)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$boost1 == "mRNA" ~ pal[1], Booster1_plot$boost1 == "non-mRNA" ~ pal[2], Booster1_plot$boost1 == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$boost1 == "mRNA" ~ pal[1], Booster1_plot$boost1 == "non-mRNA" ~ pal[2], Booster1_plot$boost1 == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 boost1 = "Booster 1",
+                 boost2 = "Booster 2")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+plot.new()
+forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "2nd Booster vs. First Booster VE Against Hospitalization/Severe Disease (In Studies Unstratified by Time Since Booster)",
+           title = "",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .15,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(0, 0.25, 0.5, 0.75, 1),
+           #hrzl_lines = variant_list, # No observations above line
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+legend(x = 0.5, y = 1.225, c("mRNA", "non-mRNA", "Multiple"), title = "First Booster", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+dev.off()
+```
+
+### Death
+
+```{r}
+pdf("./Figures/Booster2_Death.pdf", width = 14, height = 6, onefile = FALSE)
+
+Booster2_Death <- drop_na(Booster2, DeathVE)
+CI <- CI_generator(Booster2_Death$DeathVE, Booster2_Death$DeathCI_Lower, Booster2_Death$DeathCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster2_Death$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster2_Death$DeathVE, 
+                        lower = Booster2_Death$DeathCI_Lower,
+                        upper = Booster2_Death$DeathCI_Upper,
+                        study = as.character(Booster2_Death$Study),
+                        VE    = as.character(format(round(Booster2_Death$DeathVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster2_Death$Design,
+                        country = Booster2_Death$Country,
+                        boost1 = Booster2_Death$Booster1,
+                        boost2 = Booster2_Death$Booster2)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$boost1 == "mRNA" ~ pal[1], Booster1_plot$boost1 == "non-mRNA" ~ pal[2], Booster1_plot$boost1 == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$boost1 == "mRNA" ~ pal[1], Booster1_plot$boost1 == "non-mRNA" ~ pal[2], Booster1_plot$boost1 == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 boost1 = "Booster 1",
+                 boost2 = "Booster 2")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+plot.new()
+forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "2nd Booster vs. 1st Booster VE Against Mortality (In Studies Unstratified by Time Since Booster)",
+           title = "",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .125,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(0, 0.25, 0.5, 0.75, 1),
+           #hrzl_lines = variant_list, # No observations above horizontal line
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+legend(x = 0.5, y = 1.225, c("mRNA", "non-mRNA", "Multiple"), title = "First Booster", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+dev.off()
+```
+
+### Multipanel Severe Disease
+
+```{r}
+Booster2_Hospital <- drop_na(Booster2, HospitalVE)
+CI <- CI_generator(Booster2_Hospital$HospitalVE, Booster2_Hospital$HospitalCI_Lower, Booster2_Hospital$HospitalCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster2_Hospital$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+pushViewport(viewport(layout.pos.row=1, layout.pos.col=1))
+
+Booster1_plot <- tibble(mean  = Booster2_Hospital$HospitalVE, 
+                        lower = Booster2_Hospital$HospitalCI_Lower,
+                        upper = Booster2_Hospital$HospitalCI_Upper,
+                        study = as.character(Booster2_Hospital$Study),
+                        VE    = as.character(format(round(Booster2_Hospital$HospitalVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster2_Hospital$Design,
+                        country = Booster2_Hospital$Country,
+                        boost1 = Booster2_Hospital$Booster1,
+                        boost2 = Booster2_Hospital$Booster2)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$boost1 == "mRNA" ~ pal[1], Booster1_plot$boost1 == "non-mRNA" ~ pal[2], Booster1_plot$boost1 == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$boost1 == "mRNA" ~ pal[1], Booster1_plot$boost1 == "non-mRNA" ~ pal[2], Booster1_plot$boost1 == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 boost1 = "Booster 1",
+                 boost2 = "Booster 2")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+plot.new()
+fig_hosp <- forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           title = "Hospitalization/Severe Disease                                                                                                                                                                                          ",
+           #title = "",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .15,
+           clip = c(-.25, 1),
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(-0.25, 0, 0.25, 0.5, 0.75, 1),
+           #hrzl_lines = variant_list, # No observations above line
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+legend(x = 0.5, y = 1.225, c("mRNA", "non-mRNA", "Multiple"), title = "First Booster", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+###
+
+Booster2_Death <- drop_na(Booster2, DeathVE)
+CI <- CI_generator(Booster2_Death$DeathVE, Booster2_Death$DeathCI_Lower, Booster2_Death$DeathCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster2_Death$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster2_Death$DeathVE, 
+                        lower = Booster2_Death$DeathCI_Lower,
+                        upper = Booster2_Death$DeathCI_Upper,
+                        study = as.character(Booster2_Death$Study),
+                        VE    = as.character(format(round(Booster2_Death$DeathVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster2_Death$Design,
+                        country = Booster2_Death$Country,
+                        boost1 = Booster2_Death$Booster1,
+                        boost2 = Booster2_Death$Booster2)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$boost1 == "mRNA" ~ pal[1], Booster1_plot$boost1 == "non-mRNA" ~ pal[2], Booster1_plot$boost1 == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$boost1 == "mRNA" ~ pal[1], Booster1_plot$boost1 == "non-mRNA" ~ pal[2], Booster1_plot$boost1 == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 boost1 = "Booster 1",
+                 boost2 = "Booster 2")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+plot.new()
+fig_death <- forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "2nd Booster vs. 1st Booster VE Against Mortality (In Studies Unstratified by Time Since Booster)",
+           title = "Mortality                                                                                                                                                                                                                                ",
+           #title = "",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .125,
+           clip = c(-.25, 1),
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(-0.25, 0, 0.25, 0.5, 0.75, 1),
+           #hrzl_lines = variant_list, # No observations above horizontal line
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+legend(x = 0.5, y = 1.225, c("mRNA", "non-mRNA", "Multiple"), title = "First Booster", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+
+
+p1 <- grid2grob(print(fig_hosp))
+p2 <- grid2grob(print(fig_death))
+p_both <- wrap_elements(p1) / wrap_elements(p2)
+
+
+pdf("./Figures/Booster2_Severe_Multipanel.pdf", width = 14, height = 12, onefile = FALSE)
+
+plot.new()
+p_both
+legend(x = .5, y = 1.115, c("mRNA", "non-mRNA", "Multiple"), title = "First Booster", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+dev.off()
+```
+
+
+# VE Stratified by Time Since Vaccination
+
+## 1-2 Weeks
+
+```{r, include = FALSE, eval = FALSE}
+ggplot(Booster1Week2, aes(x = InfectionVE, y = Study, xmin = InfectionCI_Lower, xmax = InfectionCI_Upper)) +
+  geom_point() +
+  geom_errorbarh(height = 0.65) +
+  xlim(0,1) +
+  labs(title = "1st Booster VE Against Infection At 1-2 Weeks",
+       x = "Vaccine Effectiveness Against Infection")
+```
+
+### Infection
+
+```{r}
+pdf("./Figures/Booster1Week2_Infection.pdf", width = 14, height = 6, onefile = FALSE)
+
+Booster1Week2_Infection <- drop_na(Booster1Week2, InfectionVE)
+CI <- CI_generator(Booster1Week2_Infection$InfectionVE, Booster1Week2_Infection$InfectionCI_Lower, Booster1Week2_Infection$InfectionCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster1Week2_Infection$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster1Week2_Infection$InfectionVE, 
+                        lower = Booster1Week2_Infection$InfectionCI_Lower,
+                        upper = Booster1Week2_Infection$InfectionCI_Upper,
+                        study = as.character(Booster1Week2_Infection$Study),
+                        VE    = as.character(format(round(Booster1Week2_Infection$InfectionVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster1Week2_Infection$Design,
+                        country = Booster1Week2_Infection$Country,
+                        primary = Booster1Week2_Infection$PrimarySeries,
+                        boost = Booster1Week2_Infection$Booster)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+plot.new()
+forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Infection At 1-2 Weeks",
+           title = "",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .1,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(0, 0.25, 0.5, 0.75, 1),
+           hrzl_lines = variant_list,
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+legend(x = 0.5, y = 1.225, c("mRNA", "non-mRNA", "Multiple"), title = "Primary Series", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+dev.off()
+```
+
+## 1 Month
+
+```{r, include = FALSE, eval = FALSE}
+ggplot(Booster1Month1, aes(x = InfectionVE, y = Study, xmin = InfectionCI_Lower, xmax = InfectionCI_Upper)) +
+  geom_point() +
+  geom_errorbarh(height = 0.65) +
+  xlim(0,1) +
+  labs(title = "1st Booster VE Against Infection At 1 Month",
+       x = "Vaccine Effectiveness Against Infection")
+```
+
+### Infection
+
+```{r}
+pdf("./Figures/Booster1Month1_Infection.pdf", width = 14, height = 6, onefile = FALSE)
+
+Booster1Month1_Infection <- drop_na(Booster1Month1, InfectionVE)
+CI <- CI_generator(Booster1Month1_Infection$InfectionVE, Booster1Month1_Infection$InfectionCI_Lower, Booster1Month1_Infection$InfectionCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster1Month1_Infection$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster1Month1_Infection$InfectionVE, 
+                        lower = Booster1Month1_Infection$InfectionCI_Lower,
+                        upper = Booster1Month1_Infection$InfectionCI_Upper,
+                        study = as.character(Booster1Month1_Infection$Study),
+                        VE    = as.character(format(round(Booster1Month1_Infection$InfectionVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster1Month1_Infection$Design,
+                        country = Booster1Month1_Infection$Country,
+                        primary = Booster1Month1_Infection$PrimarySeries,
+                        boost = Booster1Month1_Infection$Booster)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+plot.new()
+forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Infection At 1 Month",
+           title = "",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .175,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(0, 0.25, 0.5, 0.75, 1),
+           hrzl_lines = variant_list,
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+legend(x = 0.5, y = 1.225, c("mRNA", "non-mRNA", "Multiple"), title = "Primary Series", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+dev.off()
+```
+
+### Hospitalization
+
+```{r}
+pdf("./Figures/Booster1Month1_Hospital.pdf", width = 14, height = 6, onefile = FALSE)
+
+Booster1Month1_Hospital <- drop_na(Booster1Month1, HospitalVE)
+CI <- CI_generator(Booster1Month1_Hospital$HospitalVE, Booster1Month1_Hospital$HospitalCI_Lower, Booster1Month1_Hospital$HospitalCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster1Month1_Hospital$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster1Month1_Hospital$HospitalVE, 
+                        lower = Booster1Month1_Hospital$HospitalCI_Lower,
+                        upper = Booster1Month1_Hospital$HospitalCI_Upper,
+                        study = as.character(Booster1Month1_Hospital$Study),
+                        VE    = as.character(format(round(Booster1Month1_Hospital$HospitalVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster1Month1_Hospital$Design,
+                        country = Booster1Month1_Hospital$Country,
+                        primary = Booster1Month1_Hospital$PrimarySeries,
+                        boost = Booster1Month1_Hospital$Booster)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+plot.new()
+forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Hospitalization/Severe Disease At 1 Month",
+           title = "",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .1,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(0, 0.25, 0.5, 0.75, 1),
+           hrzl_lines = variant_list,
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+legend(x = 0.5, y = 1.225, c("mRNA", "non-mRNA", "Multiple"), title = "Primary Series", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+dev.off()
+```
+
+### Death
+
+```{r}
+pdf("./Figures/Booster1Month1_Death.pdf", width = 14, height = 6, onefile = FALSE)
+
+Booster1Month1_Death <- drop_na(Booster1Month1, DeathVE)
+CI <- CI_generator(Booster1Month1_Death$DeathVE, Booster1Month1_Death$DeathCI_Lower, Booster1Month1_Death$DeathCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster1Month1_Death$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster1Month1_Death$DeathVE, 
+                        lower = Booster1Month1_Death$DeathCI_Lower,
+                        upper = Booster1Month1_Death$DeathCI_Upper,
+                        study = as.character(Booster1Month1_Death$Study),
+                        VE    = as.character(format(round(Booster1Month1_Death$DeathVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster1Month1_Death$Design,
+                        country = Booster1Month1_Death$Country,
+                        primary = Booster1Month1_Death$PrimarySeries,
+                        boost = Booster1Month1_Death$Booster)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+plot.new()
+forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Mortality At 1 Month",
+           title = "",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .1,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(0, 0.25, 0.5, 0.75, 1),
+           hrzl_lines = variant_list,
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+legend(x = 0.5, y = 1.225, c("mRNA", "non-mRNA", "Multiple"), title = "Primary Series", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+dev.off()
+```
+
+## 2 Months
+
+```{r, include = FALSE, eval = FALSE}
+ggplot(Booster1Month2, aes(x = InfectionVE, y = Study, xmin = InfectionCI_Lower, xmax = InfectionCI_Upper)) +
+  geom_point() +
+  geom_errorbarh(height = 0.65) +
+  xlim(0,1) +
+  labs(title = "1st Booster vs. Primary Series VE Against Infection At 2 Months",
+       x = "Vaccine Effectiveness Against Infection")
+```
+
+### Infection
+
+```{r}
+pdf("./Figures/Booster1Month2_Infection.pdf", width = 14, height = 6, onefile = FALSE)
+
+Booster1Month2_Infection <- drop_na(Booster1Month2, InfectionVE)
+CI <- CI_generator(Booster1Month2_Infection$InfectionVE, Booster1Month2_Infection$InfectionCI_Lower, Booster1Month2_Infection$InfectionCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster1Month2_Infection$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster1Month2_Infection$InfectionVE, 
+                        lower = Booster1Month2_Infection$InfectionCI_Lower,
+                        upper = Booster1Month2_Infection$InfectionCI_Upper,
+                        study = as.character(Booster1Month2_Infection$Study),
+                        VE    = as.character(format(round(Booster1Month2_Infection$InfectionVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster1Month2_Infection$Design,
+                        country = Booster1Month2_Infection$Country,
+                        primary = Booster1Month2_Infection$PrimarySeries,
+                        boost = Booster1Month2_Infection$Booster)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+plot.new()
+forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Infection At 2 Months",
+           title = "",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .2,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(0, 0.25, 0.5, 0.75, 1),
+           hrzl_lines = variant_list,
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+legend(x = 0.5, y = 1.225, c("mRNA", "non-mRNA", "Multiple"), title = "Primary Series", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+dev.off()
+```
+
+### Hospitalization
+
+```{r}
+pdf("./Figures/Booster1Month2_Hospital.pdf", width = 14, height = 6, onefile = FALSE)
+
+Booster1Month2_Hospital <- drop_na(Booster1Month2, HospitalVE)
+CI <- CI_generator(Booster1Month2_Hospital$HospitalVE, Booster1Month2_Hospital$HospitalCI_Lower, Booster1Month2_Hospital$HospitalCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster1Month2_Hospital$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster1Month2_Hospital$HospitalVE, 
+                        lower = Booster1Month2_Hospital$HospitalCI_Lower,
+                        upper = Booster1Month2_Hospital$HospitalCI_Upper,
+                        study = as.character(Booster1Month2_Hospital$Study),
+                        VE    = as.character(format(round(Booster1Month2_Hospital$HospitalVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster1Month2_Hospital$Design,
+                        country = Booster1Month2_Hospital$Country,
+                        primary = Booster1Month2_Hospital$PrimarySeries,
+                        boost = Booster1Month2_Hospital$Booster)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+plot.new()
+forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Hospitalization/Severe Disease At 2 Months",
+           title = "",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .15,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(0, 0.25, 0.5, 0.75, 1),
+           hrzl_lines = variant_list,
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+legend(x = 0.5, y = 1.225, c("mRNA", "non-mRNA", "Multiple"), title = "Primary Series", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+dev.off()
+```
+
+### Death
+
+```{r}
+pdf("./Figures/Booster1Month2_Death.pdf", width = 14, height = 6, onefile = FALSE)
+
+Booster1Month2_Death <- drop_na(Booster1Month2, DeathVE)
+CI <- CI_generator(Booster1Month2_Death$DeathVE, Booster1Month2_Death$DeathCI_Lower, Booster1Month2_Death$DeathCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster1Month2_Death$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster1Month2_Death$DeathVE, 
+                        lower = Booster1Month2_Death$DeathCI_Lower,
+                        upper = Booster1Month2_Death$DeathCI_Upper,
+                        study = as.character(Booster1Month2_Death$Study),
+                        VE    = as.character(format(round(Booster1Month2_Death$DeathVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster1Month2_Death$Design,
+                        country = Booster1Month2_Death$Country,
+                        primary = Booster1Month2_Death$PrimarySeries,
+                        boost = Booster1Month2_Death$Booster)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+plot.new()
+forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Mortality At 2 Months",
+           title = "",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .1,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(0, 0.25, 0.5, 0.75, 1),
+           hrzl_lines = variant_list,
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+legend(x = 0.5, y = 1.225, c("mRNA", "non-mRNA", "Multiple"), title = "Primary Series", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+dev.off()
+```
+
+## 3 Months
+
+```{r, include = FALSE, eval = FALSE}
+ggplot(Booster1Month3, aes(x = InfectionVE, y = Study, xmin = InfectionCI_Lower, xmax = InfectionCI_Upper)) +
+  geom_point() +
+  geom_errorbarh(height = 0.65) +
+  xlim(0,1) +
+  labs(title = "1st Booster VE Against Infection At 3 Months",
+       x = "Vaccine Effectiveness Against Infection")
+```
+
+### Infection
+
+```{r}
+pdf("./Figures/Booster1Month3_Infection.pdf", width = 14, height = 6, onefile = FALSE)
+
+Booster1Month3_Infection <- drop_na(Booster1Month3, InfectionVE)
+CI <- CI_generator(Booster1Month3_Infection$InfectionVE, Booster1Month3_Infection$InfectionCI_Lower, Booster1Month3_Infection$InfectionCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster1Month3_Infection$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster1Month3_Infection$InfectionVE, 
+                        lower = Booster1Month3_Infection$InfectionCI_Lower,
+                        upper = Booster1Month3_Infection$InfectionCI_Upper,
+                        study = as.character(Booster1Month3_Infection$Study),
+                        VE    = as.character(format(round(Booster1Month3_Infection$InfectionVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster1Month3_Infection$Design,
+                        country = Booster1Month3_Infection$Country,
+                        primary = Booster1Month3_Infection$PrimarySeries,
+                        boost = Booster1Month3_Infection$Booster)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+plot.new()
+forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Infection At 3 Months",
+           title = "",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .175,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(0, 0.25, 0.5, 0.75, 1),
+           hrzl_lines = variant_list,
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+legend(x = 0.5, y = 1.225, c("mRNA", "non-mRNA", "Multiple"), title = "Primary Series", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+dev.off()
+```
+
+### Hospitalization
+
+```{r}
+pdf("./Figures/Booster1Month3_Hospital.pdf", width = 14, height = 6, onefile = FALSE)
+
+Booster1Month3_Hospital <- drop_na(Booster1Month3, HospitalVE)
+CI <- CI_generator(Booster1Month3_Hospital$HospitalVE, Booster1Month3_Hospital$HospitalCI_Lower, Booster1Month3_Hospital$HospitalCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster1Month3_Hospital$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster1Month3_Hospital$HospitalVE, 
+                        lower = Booster1Month3_Hospital$HospitalCI_Lower,
+                        upper = Booster1Month3_Hospital$HospitalCI_Upper,
+                        study = as.character(Booster1Month3_Hospital$Study),
+                        VE    = as.character(format(round(Booster1Month3_Hospital$HospitalVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster1Month3_Hospital$Design,
+                        country = Booster1Month3_Hospital$Country,
+                        primary = Booster1Month3_Hospital$PrimarySeries,
+                        boost = Booster1Month3_Hospital$Booster)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 #primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+plot.new()
+forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Hospitalization/Severe Disease At 3 Months",
+           title = "",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .15,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(0, 0.25, 0.5, 0.75, 1),
+           hrzl_lines = variant_list,
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+legend(x = 0.5, y = 1.225, c("mRNA", "non-mRNA", "Multiple"), title = "Primary Series", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+dev.off()
+```
+
+### Death
+
+```{r}
+pdf("./Figures/Booster1Month3_Death.pdf", width = 14, height = 6, onefile = FALSE)
+
+Booster1Month3_Death <- drop_na(Booster1Month3, DeathVE)
+CI <- CI_generator(Booster1Month3_Death$DeathVE, Booster1Month3_Death$DeathCI_Lower, Booster1Month3_Death$DeathCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster1Month3_Death$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster1Month3_Death$DeathVE, 
+                        lower = Booster1Month3_Death$DeathCI_Lower,
+                        upper = Booster1Month3_Death$DeathCI_Upper,
+                        study = as.character(Booster1Month3_Death$Study),
+                        VE    = as.character(format(round(Booster1Month3_Death$DeathVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster1Month3_Death$Design,
+                        country = Booster1Month3_Death$Country,
+                        primary = Booster1Month3_Death$PrimarySeries,
+                        boost = Booster1Month3_Death$Booster)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+plot.new()
+forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Mortality At 3 Months",
+           title = "",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .1,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(0, 0.25, 0.5, 0.75, 1),
+           hrzl_lines = variant_list,
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+legend(x = 0.5, y = 1.225, c("mRNA", "non-mRNA", "Multiple"), title = "Primary Series", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+dev.off()
+```
+
+## Triple Panel
+
+### Infection
+
+```{r}
+Booster1Month1_Infection <- drop_na(Booster1Month1, InfectionVE)
+CI <- CI_generator(Booster1Month1_Infection$InfectionVE, Booster1Month1_Infection$InfectionCI_Lower, Booster1Month1_Infection$InfectionCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster1Month1_Infection$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster1Month1_Infection$InfectionVE, 
+                        lower = Booster1Month1_Infection$InfectionCI_Lower,
+                        upper = Booster1Month1_Infection$InfectionCI_Upper,
+                        study = as.character(Booster1Month1_Infection$Study),
+                        VE    = as.character(format(round(Booster1Month1_Infection$InfectionVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster1Month1_Infection$Design,
+                        country = Booster1Month1_Infection$Country,
+                        primary = Booster1Month1_Infection$PrimarySeries,
+                        boost = Booster1Month1_Infection$Booster)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+fig_1mo <- forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Infection At 1 Month",
+           #title = "",
+           title = "1 Month                                                                                                                                                                                                         ",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .175,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(0, 0.25, 0.5, 0.75, 1),
+           hrzl_lines = variant_list,
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+
+#######
+
+Booster1Month2_Infection <- drop_na(Booster1Month2, InfectionVE)
+CI <- CI_generator(Booster1Month2_Infection$InfectionVE, Booster1Month2_Infection$InfectionCI_Lower, Booster1Month2_Infection$InfectionCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster1Month2_Infection$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster1Month2_Infection$InfectionVE, 
+                        lower = Booster1Month2_Infection$InfectionCI_Lower,
+                        upper = Booster1Month2_Infection$InfectionCI_Upper,
+                        study = as.character(Booster1Month2_Infection$Study),
+                        VE    = as.character(format(round(Booster1Month2_Infection$InfectionVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster1Month2_Infection$Design,
+                        country = Booster1Month2_Infection$Country,
+                        primary = Booster1Month2_Infection$PrimarySeries,
+                        boost = Booster1Month2_Infection$Booster)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+fig_2mo <- forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Infection At 2 Months",
+           #title = "",
+           title = "2 Months                                                                                                                                                                                                         ",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .2,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(0, 0.25, 0.5, 0.75, 1),
+           hrzl_lines = variant_list,
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+
+#######
+
+Booster1Month3_Infection <- drop_na(Booster1Month3, InfectionVE)
+CI <- CI_generator(Booster1Month3_Infection$InfectionVE, Booster1Month3_Infection$InfectionCI_Lower, Booster1Month3_Infection$InfectionCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster1Month3_Infection$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster1Month3_Infection$InfectionVE, 
+                        lower = Booster1Month3_Infection$InfectionCI_Lower,
+                        upper = Booster1Month3_Infection$InfectionCI_Upper,
+                        study = as.character(Booster1Month3_Infection$Study),
+                        VE    = as.character(format(round(Booster1Month3_Infection$InfectionVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster1Month3_Infection$Design,
+                        country = Booster1Month3_Infection$Country,
+                        primary = Booster1Month3_Infection$PrimarySeries,
+                        boost = Booster1Month3_Infection$Booster)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+fig_3mo <- forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Infection At 3 Months",
+           #title = "",
+           title = "3 Months                                                                                                                                                                                                              ",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .175,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(0, 0.25, 0.5, 0.75, 1),
+           hrzl_lines = variant_list,
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+
+p1 <- grid2grob(print(fig_1mo))
+p2 <- grid2grob(print(fig_2mo))
+p3 <- grid2grob(print(fig_3mo))
+p_all <- wrap_plots(p1, p2, p3, nrow = 3, heights = c(nrow(Booster1Month1_Infection), 
+                                                      nrow(Booster1Month2_Infection), 
+                                                      nrow(Booster1Month3_Infection)))
+
+pdf("./Figures/Booster1_Month_Infection_Multipanel.pdf", width = 14, height = 15, onefile = FALSE)
+
+plot.new()
+p_all
+legend(x = .5, y = 1.1, c("mRNA", "non-mRNA", "Multiple"), title = "Primary Series", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+dev.off()
+```
+
+
+### Hospitalization
+
+```{r}
+Booster1Month1_Hospital <- drop_na(Booster1Month1, HospitalVE)
+CI <- CI_generator(Booster1Month1_Hospital$HospitalVE, Booster1Month1_Hospital$HospitalCI_Lower, Booster1Month1_Hospital$HospitalCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster1Month1_Hospital$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster1Month1_Hospital$HospitalVE, 
+                        lower = Booster1Month1_Hospital$HospitalCI_Lower,
+                        upper = Booster1Month1_Hospital$HospitalCI_Upper,
+                        study = as.character(Booster1Month1_Hospital$Study),
+                        VE    = as.character(format(round(Booster1Month1_Hospital$HospitalVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster1Month1_Hospital$Design,
+                        country = Booster1Month1_Hospital$Country,
+                        primary = Booster1Month1_Hospital$PrimarySeries,
+                        boost = Booster1Month1_Hospital$Booster)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+fig_1mo <- forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Hospitalization/Severe Disease At 1 Month",
+           #title = "",
+           title = "1 Month                                                                                                                                                                                                         ",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .2,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(0, 0.25, 0.5, 0.75, 1),
+           hrzl_lines = variant_list,
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+
+########
+
+Booster1Month2_Hospital <- drop_na(Booster1Month2, HospitalVE)
+CI <- CI_generator(Booster1Month2_Hospital$HospitalVE, Booster1Month2_Hospital$HospitalCI_Lower, Booster1Month2_Hospital$HospitalCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster1Month2_Hospital$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster1Month2_Hospital$HospitalVE, 
+                        lower = Booster1Month2_Hospital$HospitalCI_Lower,
+                        upper = Booster1Month2_Hospital$HospitalCI_Upper,
+                        study = as.character(Booster1Month2_Hospital$Study),
+                        VE    = as.character(format(round(Booster1Month2_Hospital$HospitalVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster1Month2_Hospital$Design,
+                        country = Booster1Month2_Hospital$Country,
+                        primary = Booster1Month2_Hospital$PrimarySeries,
+                        boost = Booster1Month2_Hospital$Booster)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+fig_2mo <- forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Hospitalization/Severe Disease At 2 Months",
+           #title = "",
+           title = "2 Months                                                                                                                                                                                                         ",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .15,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(0, 0.25, 0.5, 0.75, 1),
+           hrzl_lines = variant_list,
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+
+########
+
+Booster1Month3_Hospital <- drop_na(Booster1Month3, HospitalVE)
+CI <- CI_generator(Booster1Month3_Hospital$HospitalVE, Booster1Month3_Hospital$HospitalCI_Lower, Booster1Month3_Hospital$HospitalCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster1Month3_Hospital$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster1Month3_Hospital$HospitalVE, 
+                        lower = Booster1Month3_Hospital$HospitalCI_Lower,
+                        upper = Booster1Month3_Hospital$HospitalCI_Upper,
+                        study = as.character(Booster1Month3_Hospital$Study),
+                        VE    = as.character(format(round(Booster1Month3_Hospital$HospitalVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster1Month3_Hospital$Design,
+                        country = Booster1Month3_Hospital$Country,
+                        primary = Booster1Month3_Hospital$PrimarySeries,
+                        boost = Booster1Month3_Hospital$Booster)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 #primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+fig_3mo <- forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Hospitalization/Severe Disease At 3 Months",
+           #title = "",
+           title = "3 Months                                                                                                                                                                                                         ",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .15,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(0, 0.25, 0.5, 0.75, 1),
+           hrzl_lines = variant_list,
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+
+p1 <- grid2grob(print(fig_1mo))
+p2 <- grid2grob(print(fig_2mo))
+p3 <- grid2grob(print(fig_3mo))
+p_all <- wrap_plots(p1, p2, p3, nrow = 3, heights = c(nrow(Booster1Month1_Hospital), 
+                                                      nrow(Booster1Month2_Hospital), 
+                                                      nrow(Booster1Month3_Hospital)))
+
+pdf("./Figures/Booster1_Month_Hospitalization_Multipanel.pdf", width = 14, height = 15, onefile = FALSE)
+
+plot.new()
+p_all
+legend(x = .5, y = 1.1, c("mRNA", "non-mRNA", "Multiple"), title = "Primary Series", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+dev.off()
+
+```
+
+
+### Death
+
+```{r}
+Booster1Month1_Death <- drop_na(Booster1Month1, DeathVE)
+CI <- CI_generator(Booster1Month1_Death$DeathVE, Booster1Month1_Death$DeathCI_Lower, Booster1Month1_Death$DeathCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster1Month1_Death$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster1Month1_Death$DeathVE, 
+                        lower = Booster1Month1_Death$DeathCI_Lower,
+                        upper = Booster1Month1_Death$DeathCI_Upper,
+                        study = as.character(Booster1Month1_Death$Study),
+                        VE    = as.character(format(round(Booster1Month1_Death$DeathVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster1Month1_Death$Design,
+                        country = Booster1Month1_Death$Country,
+                        primary = Booster1Month1_Death$PrimarySeries,
+                        boost = Booster1Month1_Death$Booster)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+fig_1mo <- forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Mortality At 1 Month",
+           #title = "",
+           title = "1 Month                                                                                                                                                                                                         ",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .15,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(0, 0.25, 0.5, 0.75, 1),
+           hrzl_lines = variant_list,
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+
+#########
+
+Booster1Month2_Death <- drop_na(Booster1Month2, DeathVE)
+CI <- CI_generator(Booster1Month2_Death$DeathVE, Booster1Month2_Death$DeathCI_Lower, Booster1Month2_Death$DeathCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster1Month2_Death$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster1Month2_Death$DeathVE, 
+                        lower = Booster1Month2_Death$DeathCI_Lower,
+                        upper = Booster1Month2_Death$DeathCI_Upper,
+                        study = as.character(Booster1Month2_Death$Study),
+                        VE    = as.character(format(round(Booster1Month2_Death$DeathVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster1Month2_Death$Design,
+                        country = Booster1Month2_Death$Country,
+                        primary = Booster1Month2_Death$PrimarySeries,
+                        boost = Booster1Month2_Death$Booster)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+fig_2mo <- forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Mortality At 2 Months",
+           #title = "",
+           title = "2 Months                                                                                                                                                                                                         ",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .125,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(0, 0.25, 0.5, 0.75, 1),
+           hrzl_lines = variant_list,
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+
+#########
+
+Booster1Month3_Death <- drop_na(Booster1Month3, DeathVE)
+CI <- CI_generator(Booster1Month3_Death$DeathVE, Booster1Month3_Death$DeathCI_Lower, Booster1Month3_Death$DeathCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Booster1Month3_Death$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Booster1Month3_Death$DeathVE, 
+                        lower = Booster1Month3_Death$DeathCI_Lower,
+                        upper = Booster1Month3_Death$DeathCI_Upper,
+                        study = as.character(Booster1Month3_Death$Study),
+                        VE    = as.character(format(round(Booster1Month3_Death$DeathVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Booster1Month3_Death$Design,
+                        country = Booster1Month3_Death$Country,
+                        primary = Booster1Month3_Death$PrimarySeries,
+                        boost = Booster1Month3_Death$Booster)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$primary == "mRNA" ~ pal[1], Booster1_plot$primary == "non-mRNA" ~ pal[2], Booster1_plot$primary == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+plot.new()
+fig_3mo <- forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Mortality At 3 Months",
+           #title = "",
+           title = "3 Months                                                                                                                                                                                                         ",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .13,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(0, 0.25, 0.5, 0.75, 1),
+           hrzl_lines = variant_list,
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+
+##########
+
+p1 <- grid2grob(print(fig_1mo))
+p2 <- grid2grob(print(fig_2mo))
+p3 <- grid2grob(print(fig_3mo))
+p_all <- wrap_plots(p1, p2, p3, nrow = 3, heights = c(nrow(Booster1Month1_Death), 
+                                                      nrow(Booster1Month2_Death), 
+                                                      nrow(Booster1Month3_Death)))
+
+pdf("./Figures/Booster1_Month_Death_Multipanel.pdf", width = 14, height = 15, onefile = FALSE)
+
+plot.new()
+p_all
+legend(x = .5, y = 1.1, c("mRNA", "non-mRNA", "Multiple"), title = "Primary Series", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+dev.off()
+```
+
+
+# Bivalent
+
+## Infection/Hospitalization Multipanel
+
+```{r}
+Bivalent_Infection <- drop_na(Bivalent, InfectionVE)
+CI <- CI_generator(Bivalent_Infection$InfectionVE, Bivalent_Infection$InfectionCI_Lower, Bivalent_Infection$InfectionCI_Upper)
+
+Booster1_plot <- tibble(mean  = Bivalent_Infection$InfectionVE, 
+                        lower = Bivalent_Infection$InfectionCI_Lower,
+                        upper = Bivalent_Infection$InfectionCI_Upper,
+                        study = as.character(Bivalent_Infection$Study),
+                        VE    = as.character(format(round(Bivalent_Infection$InfectionVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Bivalent_Infection$Design,
+                        country = Bivalent_Infection$Country,
+                        primary = Bivalent_Infection$PrimarySeries,
+                        boost = Bivalent_Infection$Booster,
+                        bivalent = Bivalent_Infection$Bivalent)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$bivalent == "BA.1" ~ pal[1], Booster1_plot$bivalent == "BA.4-5" ~ pal[2], Booster1_plot$bivalent == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$bivalent == "BA.1" ~ pal[1], Booster1_plot$bivalent == "BA.4-5" ~ pal[2], Booster1_plot$bivalent == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+fig_hosp <- forestplot(Booster1_plot, 
+                       fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Hospitalization/Severe Disease (In Studies Unstratified by Time Since Booster)",
+           #title = "",
+           title = "Infection                                                                                                                                                                                           ",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .175,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(-.25, 0, 0.25, 0.5, 0.75, 1),
+           clip = c(-.25, 1),
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+
+###
+
+Bivalent_Hospital <- drop_na(Bivalent, HospitalVE)
+CI <- CI_generator(Bivalent_Hospital$HospitalVE, Bivalent_Hospital$HospitalCI_Lower, Bivalent_Hospital$HospitalCI_Upper)
+
+Booster1_plot <- tibble(mean  = Bivalent_Hospital$HospitalVE, 
+                        lower = Bivalent_Hospital$HospitalCI_Lower,
+                        upper = Bivalent_Hospital$HospitalCI_Upper,
+                        study = as.character(Bivalent_Hospital$Study),
+                        VE    = as.character(format(round(Bivalent_Hospital$HospitalVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Bivalent_Hospital$Design,
+                        country = Bivalent_Hospital$Country,
+                        primary = Bivalent_Hospital$PrimarySeries,
+                        boost = Bivalent_Hospital$Booster,
+                        bivalent = Bivalent_Hospital$Bivalent)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$bivalent == "BA.1" ~ pal[1], Booster1_plot$bivalent == "BA.4-5" ~ pal[2], Booster1_plot$bivalent == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$bivalent == "BA.1" ~ pal[1], Booster1_plot$bivalent == "BA.4-5" ~ pal[2], Booster1_plot$bivalent == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+fig_death <- forestplot(Booster1_plot, 
+                        fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Mortality (In Studies Unstratified by Time Since Booster)",
+           #title = "",
+           title = "Hospitalization/Severe Disease                                                                                                                                                  ",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .175,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(-0.25, 0, 0.25, 0.5, 0.75, 1),
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+
+p1 <- grid2grob(print(fig_hosp))
+p2 <- grid2grob(print(fig_death))
+p_both <- wrap_plots(p1, p2, nrow = 2, heights = c(4.5,5.5))
+
+pdf("./Figures/Bivalent_Double_Multipanel.pdf", width = 14, height = 10, onefile = FALSE)
+
+plot.new()
+p_both
+
+dev.off()
+```
+
+## Death
+
+```{r}
+pdf("./Figures/Bivalent_Death.pdf", width = 14, height = 6, onefile = FALSE)
+
+Bivalent_Death <- drop_na(Bivalent, DeathVE)
+CI <- CI_generator(Bivalent_Death$DeathVE, Bivalent_Death$DeathCI_Lower, Bivalent_Death$DeathCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Bivalent_Death$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Bivalent_Death$DeathVE, 
+                        lower = Bivalent_Death$DeathCI_Lower,
+                        upper = Bivalent_Death$DeathCI_Upper,
+                        study = as.character(Bivalent_Death$Study),
+                        VE    = as.character(format(round(Bivalent_Death$DeathVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Bivalent_Death$Design,
+                        country = Bivalent_Death$Country,
+                        primary = Bivalent_Death$PrimarySeries,
+                        boost = Bivalent_Death$Booster,
+                        bivalent = Bivalent_Death$Bivalent)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$bivalent == "BA.1" ~ pal[1], Booster1_plot$bivalent == "BA.4-5" ~ pal[2], Booster1_plot$bivalent == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$bivalent == "BA.1" ~ pal[1], Booster1_plot$bivalent == "BA.4-5" ~ pal[2], Booster1_plot$bivalent == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+plot.new()
+forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Mortality At 3 Months",
+           title = "",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .1,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(-0.25, 0, 0.25, 0.5, 0.75, 1),
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+legend(x = 0.5, y = 1.225, c("BA.1", "BA.4-5", "Multiple"), title = "Bivalent Type", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+dev.off()
+```
+
+## Triple Multipanel
+
+```{r}
+Bivalent_Infection <- drop_na(Bivalent, InfectionVE)
+CI <- CI_generator(Bivalent_Infection$InfectionVE, Bivalent_Infection$InfectionCI_Lower, Bivalent_Infection$InfectionCI_Upper)
+
+Booster1_plot <- tibble(mean  = Bivalent_Infection$InfectionVE, 
+                        lower = Bivalent_Infection$InfectionCI_Lower,
+                        upper = Bivalent_Infection$InfectionCI_Upper,
+                        study = as.character(Bivalent_Infection$Study),
+                        VE    = as.character(format(round(Bivalent_Infection$InfectionVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Bivalent_Infection$Design,
+                        country = Bivalent_Infection$Country,
+                        primary = Bivalent_Infection$PrimarySeries,
+                        boost = Bivalent_Infection$Booster,
+                        bivalent = Bivalent_Infection$Bivalent)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$bivalent == "BA.1" ~ pal[1], Booster1_plot$bivalent == "BA.4-5" ~ pal[2], Booster1_plot$bivalent == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$bivalent == "BA.1" ~ pal[1], Booster1_plot$bivalent == "BA.4-5" ~ pal[2], Booster1_plot$bivalent == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+fig_infect <- forestplot(Booster1_plot, 
+                       fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Hospitalization/Severe Disease (In Studies Unstratified by Time Since Booster)",
+           #title = "",
+           title = "Infection                                                                                                                                                                                                                                   ",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .175,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(-.25, 0, 0.25, 0.5, 0.75, 1),
+           clip = c(-.25, 1),
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+
+###
+
+Bivalent_Hospital <- drop_na(Bivalent, HospitalVE)
+CI <- CI_generator(Bivalent_Hospital$HospitalVE, Bivalent_Hospital$HospitalCI_Lower, Bivalent_Hospital$HospitalCI_Upper)
+
+Booster1_plot <- tibble(mean  = Bivalent_Hospital$HospitalVE, 
+                        lower = Bivalent_Hospital$HospitalCI_Lower,
+                        upper = Bivalent_Hospital$HospitalCI_Upper,
+                        study = as.character(Bivalent_Hospital$Study),
+                        VE    = as.character(format(round(Bivalent_Hospital$HospitalVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Bivalent_Hospital$Design,
+                        country = Bivalent_Hospital$Country,
+                        primary = Bivalent_Hospital$PrimarySeries,
+                        boost = Bivalent_Hospital$Booster,
+                        bivalent = Bivalent_Hospital$Bivalent)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$bivalent == "BA.1" ~ pal[1], Booster1_plot$bivalent == "BA.4-5" ~ pal[2], Booster1_plot$bivalent == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$bivalent == "BA.1" ~ pal[1], Booster1_plot$bivalent == "BA.4-5" ~ pal[2], Booster1_plot$bivalent == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 #VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+fig_hosp <- forestplot(Booster1_plot, 
+                        fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Mortality (In Studies Unstratified by Time Since Booster)",
+           #title = "",
+           title = "Hospitalization/Severe Disease                                                                                                                                                                                             ",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .175,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(-0.25, 0, 0.25, 0.5, 0.75, 1),
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+
+###
+
+Bivalent_Death <- drop_na(Bivalent, DeathVE)
+CI <- CI_generator(Bivalent_Death$DeathVE, Bivalent_Death$DeathCI_Lower, Bivalent_Death$DeathCI_Upper)
+
+variant_num <- as.character(min(grep("2022", Bivalent_Death$End)) + 1)
+variant_list <- list(1)
+names(variant_list) <- variant_num
+variant_list[[variant_num]] <- gpar(lty = 2)
+
+Booster1_plot <- tibble(mean  = Bivalent_Death$DeathVE, 
+                        lower = Bivalent_Death$DeathCI_Lower,
+                        upper = Bivalent_Death$DeathCI_Upper,
+                        study = as.character(Bivalent_Death$Study),
+                        VE    = as.character(format(round(Bivalent_Death$DeathVE, 2), nsmall = 2)),
+                        CI    = as.character(CI),
+                        design = Bivalent_Death$Design,
+                        country = Bivalent_Death$Country,
+                        primary = Bivalent_Death$PrimarySeries,
+                        boost = Bivalent_Death$Booster,
+                        bivalent = Bivalent_Death$Bivalent)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(Booster1_plot$mean))
+  b_clrs = case_when(Booster1_plot$bivalent == "BA.1" ~ pal[1], Booster1_plot$bivalent == "BA.4-5" ~ pal[2], Booster1_plot$bivalent == "Multiple" ~ pal[3])
+  l_clrs = case_when(Booster1_plot$bivalent == "BA.1" ~ pal[1], Booster1_plot$bivalent == "BA.4-5" ~ pal[2], Booster1_plot$bivalent == "Multiple" ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(study = "Study",
+                 VE = "VE",
+                 CI = "VE (95% CI)",
+                 design = "Design",
+                 country = "Country",
+                 primary = "Primary",
+                 boost = "Booster")
+Booster1_plot <- bind_rows(header, Booster1_plot)
+plot.new()
+fig_death <- forestplot(Booster1_plot, 
+           fn.ci_norm = fn,
+           labeltext = c(study, country, design, CI), 
+           #title = "1st Booster vs. Primary Series VE Against Mortality At 3 Months",
+           #title = "",
+           title = "Mortality                                                                                                                                                                                                                                   ",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 4,
+           boxsize = .175,
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(-0.25, 0, 0.25, 0.5, 0.75, 1),
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+fp_set_zebra_style("#EFEFEF")
+
+p1 <- grid2grob(print(fig_infect))
+p2 <- grid2grob(print(fig_hosp))
+p3 <- grid2grob(print(fig_death))
+p_all <- wrap_plots(p1, p2, p3, nrow = 3, heights = c(3.5,5,3.5))
+
+pdf("./Figures/Bivalent_Triple_Multipanel.pdf", width = 14, height = 12, onefile = FALSE)
+
+plot.new()
+p_all
+legend(x = .5, y = 1.115, c("mRNA", "non-mRNA", "Multiple"), title = "Primary Series", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+dev.off()
+```
+
+
