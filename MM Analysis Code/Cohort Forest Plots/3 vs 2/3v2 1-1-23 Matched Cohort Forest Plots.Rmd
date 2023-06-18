@@ -1,0 +1,379 @@
+---
+title: "1-1-23 Matched Cohort Booster Forest Plots"
+author: "Sabir Meah"
+date: "2023-01-17"
+output: 
+  pdf_document: 
+    keep_md: yes
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(forestplot)
+library(ggplotify)
+library(patchwork)
+knitr::opts_chunk$set(fig.width=10, fig.height=8) 
+```
+
+```{r}
+Infection <- read.csv("3v2 Infection Matched Forest Plot.csv") 
+Hospitalization <- read.csv("3v2 Severe Disease Matched Forest Plot.csv") 
+
+Infection <- Infection %>%
+  mutate(For = factor(For)) %>%
+  mutate(Method = factor(Method, 
+                         levels = c("Unadj.", "Covar. Adj.", 
+                                    "Exact", "Exact Strat.",
+                                    "Prop. Cal.", "Prop. Cal. Strat.",
+                                    "Prop. Adj.", "Prop + Covar. Adj.",
+                                    "IPW", "IPW Covar. Adj."),
+                         labels = c("Unadj.", "Adj.", 
+                                    "EXM", "EXM-S",
+                                    "PSM", "PSM-S",
+                                    "PSA", "PSA-CA",
+                                    "IPW", "IPW-CA"))) %>%
+  arrange(Method) %>%
+  mutate(Design = 1:nrow(Infection))
+
+Hospitalization <- Hospitalization %>%
+  mutate(For = factor(For)) %>%
+  mutate(Method = factor(Method, 
+                         levels = c("Unadj.", "Covar. Adj.", 
+                                    "Exact", "Exact Strat.",
+                                    "Prop. Cal.", "Prop. Cal. Strat.",
+                                    "Prop. Adj.", "Prop + Covar. Adj.",
+                                    "IPW", "IPW Covar. Adj."),
+                         labels = c("Unadj.", "Adj.", 
+                                    "EXM", "EXM-S",
+                                    "PSM", "PSM-S",
+                                    "PSA", "PSA-CA",
+                                    "IPW", "IPW-CA"))) %>%
+  arrange(Method) %>%
+  mutate(Design = 1:nrow(Hospitalization))
+```
+
+
+```{r}
+# Old function with only CI
+CI_generator <- function(center, lower, upper){
+  CI <- rep(0, length(center))
+  for(i in 1:length(center)){
+    CI[i] <- paste0("(", 
+                    format(round(lower[i], 3), nsmall = 3), 
+                    ",", 
+                    format(round(upper[i], 3), nsmall = 3), 
+                    ")")
+  }
+  return(CI)
+}
+
+# New function with VE and CI
+CI_generator <- function(center, lower, upper){
+  CI <- rep(0, length(center))
+  for(i in 1:length(center)){
+    CI[i] <- paste0(format(round(center[i], 2), nsmall = 2),
+                    "  ",
+                    "(", 
+                    format(round(lower[i], 2), nsmall = 2), 
+                    ", ", 
+                    format(round(upper[i], 2), nsmall = 2), 
+                    ")")
+  }
+  return(CI)
+}
+```
+
+```{r}
+ForestLines <- function(data, var = "Start_Quarter", linetype = 2){
+  Var_Changes <- data %>%
+  group_by(get(var, data)) %>%
+  summarize(Change = min(Design) + 1) %>%
+  arrange(Change) %>%
+  filter(Change != min(Change))
+
+  var_list <- list()
+  for(i in 1:dim(Var_Changes)[1]){
+    var_list[[trimws(as.character(Var_Changes[i,2]), which = "both")]] <- gpar(lty = linetype)
+  }
+  
+  return(var_list)
+}
+```
+
+```{r}
+pal <- c("blue", "red", "#009b00", "purple")
+#pal <- c("#377EB8", "#E41A1C", "#4DAF4A", "purple")
+```
+
+```{r}
+pdf("./Figures/Cohort_3v2_Infection_Matched.pdf", width = 10, height = 8, onefile = FALSE)
+
+CI <- CI_generator(Infection$InfectionVE, Infection$Lower95, Infection$Upper95)
+infection_plot <- tibble(mean  = Infection$InfectionVE, 
+                         lower = Infection$Lower95,
+                         upper = Infection$Upper95,
+                         VE    = as.character(format(round(Infection$InfectionVE, 3), nsmall = 3)),
+                         CI    = as.character(CI),
+                         design = as.character(Infection$Design),
+                         method = Infection$Method,
+                         whofor = Infection$For,
+                         n = as.character(Infection$n)
+                         )
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(infection_plot$mean))
+  b_clrs = case_when(infection_plot$whofor == "Boosting" ~ pal[1], 
+                     infection_plot$whofor == "Testing" ~ pal[2], 
+                     infection_plot$whofor == "Both" ~ pal[3], 
+                     infection_plot$whofor == "N/A" ~ pal[4])
+  l_clrs = case_when(infection_plot$whofor == "Boosting" ~ pal[1], 
+                     infection_plot$whofor == "Testing" ~ pal[2], 
+                     infection_plot$whofor == "Both" ~ pal[3], 
+                     infection_plot$whofor == "N/A" ~ pal[4])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(design = "Design",
+                 method = "Method",
+                 whofor = "For",
+                 n = "n",
+                 VE = "VE",
+                 CI = "VE (95% CI)")
+infection_plot <- bind_rows(header, infection_plot)
+plot.new()
+fig <- forestplot(infection_plot, 
+                  fn.ci_norm = fn,
+           labeltext = c(method, n, CI), 
+           #title = "Cohort 3 vs 2 Dose Infection VE with Different Matched Designs (Q4 2021 Index Date)",
+           title = "",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 3,
+           boxsize = .2,
+           clip = c(.35,.6),
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = seq(.35,.6, by = 0.05),
+           zero = 0.5, # specifies the no effect line as 0.5, need this to trick plot into not setting a lower xlim of 0
+           lwd.zero = NA, # tells plot to hide no effect line
+           hrzl_lines = ForestLines(Infection, "Method"),
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+  fp_set_zebra_style("#EFEFEF")
+legend(x = 0.265, y = 1.15, 
+       c("Boosting", "Testing", "Both", "Neither"), title = "Matching/Propensity For", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3], pal[4]), pch = c(15,15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+fig
+
+dev.off()
+
+#fig
+```
+
+```{r}
+pdf("./Figures/Cohort_3v2_Severe_Matched.pdf", width = 10, height = 8, onefile = FALSE)
+
+CI <- CI_generator(Hospitalization$HospVE, Hospitalization$Lower95, Hospitalization$Upper95)
+hospitalization_plot <- tibble(mean  = Hospitalization$HospVE, 
+                         lower = Hospitalization$Lower95,
+                         upper = Hospitalization$Upper95,
+                         VE    = as.character(format(round(Hospitalization$HospVE, 3), nsmall = 3)),
+                         CI    = as.character(CI),
+                         design = as.character(Hospitalization$Design),
+                         method = Hospitalization$Method,
+                         whofor = Hospitalization$For,
+                         n = as.character(Hospitalization$n)
+                         )
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(hospitalization_plot$mean))
+  b_clrs = case_when(hospitalization_plot$whofor == "Boosting" ~ pal[1], 
+                     hospitalization_plot$whofor == "Testing" ~ pal[2], 
+                     hospitalization_plot$whofor == "Both" ~ pal[3], 
+                     hospitalization_plot$whofor == "N/A" ~ pal[4])
+  l_clrs = case_when(hospitalization_plot$whofor == "Boosting" ~ pal[1], 
+                     hospitalization_plot$whofor == "Testing" ~ pal[2], 
+                     hospitalization_plot$whofor == "Both" ~ pal[3], 
+                     hospitalization_plot$whofor == "N/A" ~ pal[4])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(design = "Design",
+                 method = "Method",
+                 whofor = "For",
+                 n = "n",
+                 VE = "VE",
+                 CI = "VE (95% CI)")
+hospitalization_plot <- bind_rows(header, hospitalization_plot)
+plot.new()
+fig <- forestplot(hospitalization_plot,
+                  fn.ci_norm = fn,
+           labeltext = c(method, n, CI), 
+           #title = "Cohort 3 vs 2 Dose Severe Disease VE with Different Matched Designs (Q4 2021 Index Date)",
+           title = "",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 3,
+           boxsize = .2,
+           clip = c(0.3, 0.78),
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = seq(.3,.75, by = 0.05),
+           zero = 0.5, # specifies the no effect line as 0.5, need this to trick plot into not setting a lower xlim of 0
+           lwd.zero = NA, # tells plot to hide no effect line
+           hrzl_lines = ForestLines(Hospitalization, "Method"),
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+  fp_set_zebra_style("#EFEFEF")
+legend(x = 0.265, y = 1.15, 
+       c("Boosting", "Testing", "Both", "Neither"), title = "Matching/Propensity For", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3], pal[4]), pch = c(15,15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+fig
+
+dev.off()
+
+#fig
+```
+
+```{r}
+CI <- CI_generator(Infection$InfectionVE, Infection$Lower95, Infection$Upper95)
+infection_plot <- tibble(mean  = Infection$InfectionVE, 
+                         lower = Infection$Lower95,
+                         upper = Infection$Upper95,
+                         VE    = as.character(format(round(Infection$InfectionVE, 3), nsmall = 3)),
+                         CI    = as.character(CI),
+                         design = as.character(Infection$Design),
+                         method = Infection$Method,
+                         whofor = Infection$For,
+                         n = as.character(Infection$n)
+                         )
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(infection_plot$mean))
+  b_clrs = case_when(infection_plot$whofor == "Boosting" ~ pal[1], 
+                     infection_plot$whofor == "Testing" ~ pal[2], 
+                     infection_plot$whofor == "Both" ~ pal[3], 
+                     infection_plot$whofor == "N/A" ~ pal[4])
+  l_clrs = case_when(infection_plot$whofor == "Boosting" ~ pal[1], 
+                     infection_plot$whofor == "Testing" ~ pal[2], 
+                     infection_plot$whofor == "Both" ~ pal[3], 
+                     infection_plot$whofor == "N/A" ~ pal[4])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(design = "Design",
+                 method = "Method",
+                 whofor = "For",
+                 n = "n",
+                 VE = "VE",
+                 CI = "VE (95% CI)")
+infection_plot <- bind_rows(header, infection_plot)
+plot.new()
+fig_infection <- forestplot(infection_plot, 
+                  fn.ci_norm = fn,
+           labeltext = c(method, n, CI), 
+           #title = "Cohort 3 vs 2 Dose Infection VE with Different Matched Designs (Q4 2021 Index Date)",
+           #title = "",
+           title = "Infection                                                                                                                                                             ",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 3,
+           boxsize = .2,
+           clip = c(0, 1),
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = seq(0, 1, by = 0.25),
+           zero = 0.5, # specifies the no effect line as 0.5, need this to trick plot into not setting a lower xlim of 0
+           lwd.zero = NA, # tells plot to hide no effect line
+           hrzl_lines = ForestLines(Infection, "Method"),
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+  fp_set_zebra_style("#EFEFEF")
+
+###
+
+CI <- CI_generator(Hospitalization$HospVE, Hospitalization$Lower95, Hospitalization$Upper95)
+hospitalization_plot <- tibble(mean  = Hospitalization$HospVE, 
+                         lower = Hospitalization$Lower95,
+                         upper = Hospitalization$Upper95,
+                         VE    = as.character(format(round(Hospitalization$HospVE, 3), nsmall = 3)),
+                         CI    = as.character(CI),
+                         design = as.character(Hospitalization$Design),
+                         method = Hospitalization$Method,
+                         whofor = Hospitalization$For,
+                         n = as.character(Hospitalization$n)
+                         )
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(hospitalization_plot$mean))
+  b_clrs = case_when(hospitalization_plot$whofor == "Boosting" ~ pal[1], 
+                     hospitalization_plot$whofor == "Testing" ~ pal[2], 
+                     hospitalization_plot$whofor == "Both" ~ pal[3], 
+                     hospitalization_plot$whofor == "N/A" ~ pal[4])
+  l_clrs = case_when(hospitalization_plot$whofor == "Boosting" ~ pal[1], 
+                     hospitalization_plot$whofor == "Testing" ~ pal[2], 
+                     hospitalization_plot$whofor == "Both" ~ pal[3], 
+                     hospitalization_plot$whofor == "N/A" ~ pal[4])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(design = "Design",
+                 method = "Method",
+                 whofor = "For",
+                 n = "n",
+                 VE = "VE",
+                 CI = "VE (95% CI)")
+hospitalization_plot <- bind_rows(header, hospitalization_plot)
+plot.new()
+fig_severe <- forestplot(hospitalization_plot,
+                  fn.ci_norm = fn,
+           labeltext = c(method, n, CI), 
+           #title = "Cohort 3 vs 2 Dose Severe Disease VE with Different Matched Designs (Q4 2021 Index Date)",
+           #title = "",
+           title = "Severe Disease                                                                                                                                                  ",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 3,
+           boxsize = .2,
+           clip = c(0, 1),
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = seq(0, 1, by = 0.25),
+           zero = 0.5, # specifies the no effect line as 0.5, need this to trick plot into not setting a lower xlim of 0
+           lwd.zero = NA, # tells plot to hide no effect line
+           hrzl_lines = ForestLines(Hospitalization, "Method"),
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+  fp_set_zebra_style("#EFEFEF")
+
+
+
+
+p1 <- grid2grob(print(fig_infection))
+p2 <- grid2grob(print(fig_severe))
+p_both <- wrap_plots(p1, p2, nrow = 2)
+
+pdf("./Figures/Cohort_3v2_Matched_Multipanel.pdf", width = 10, height = 14, onefile = FALSE)
+plot.new()
+p_both
+legend(x = .275, y = 1.1, 
+       c("Boosting", "Testing", "Both", "Neither"), title = "Matching/Propensity For", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3], pal[4]), pch = c(15,15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+dev.off()
+```
+

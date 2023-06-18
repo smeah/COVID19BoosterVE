@@ -1,0 +1,206 @@
+---
+title: "1-1-23 Cohort Booster Forest Plots"
+author: "Sabir Meah"
+date: "2023-01-17"
+output: 
+  pdf_document: 
+    keep_md: yes
+---
+
+```{r setup, include=FALSE}
+library(tidyverse)
+library(forestplot)
+knitr::opts_chunk$set(fig.width=10, fig.height=6) 
+```
+
+```{r}
+Infection <- read.csv("3v2 Infection Non-Matched Forest Plot.csv") %>% 
+  filter(Incl_PrevQ_Boosted == "N") %>%
+  mutate(Design = seq(1, 8))
+Hospitalization <- read.csv("3v2 Severe Disease Non-Matched Forest Plot.csv") %>% 
+  filter(Incl_PrevQ_Boosted == "N") %>%
+  mutate(Design = seq(1, 8))
+```
+
+```{r}
+# Old function with only CI
+CI_generator <- function(center, lower, upper){
+  CI <- rep(0, length(center))
+  for(i in 1:length(center)){
+    CI[i] <- paste0("(", 
+                    format(round(lower[i], 3), nsmall = 3), 
+                    ",", 
+                    format(round(upper[i], 3), nsmall = 3), 
+                    ")")
+  }
+  return(CI)
+}
+
+# New function with VE and CI
+CI_generator <- function(center, lower, upper){
+  CI <- rep(0, length(center))
+  for(i in 1:length(center)){
+    CI[i] <- paste0(format(round(center[i], 2), nsmall = 2),
+                    "  ",
+                    "(", 
+                    format(round(lower[i], 2), nsmall = 2), 
+                    ", ", 
+                    format(round(upper[i], 2), nsmall = 2), 
+                    ")")
+  }
+  return(CI)
+}
+```
+
+```{r}
+ForestLines <- function(data, var = "Start_Quarter", linetype = 2){
+  Var_Changes <- data %>%
+  group_by(get(var, data)) %>%
+  summarize(Change = min(Design) + 1) %>%
+  arrange(Change) %>%
+  filter(Change != min(Change))
+
+  var_list <- list()
+  for(i in 1:dim(Var_Changes)[1]){
+    var_list[[trimws(as.character(Var_Changes[i,2]), which = "both")]] <- gpar(lty = linetype)
+  }
+  
+  return(var_list)
+}
+```
+
+```{r}
+pal <- c("blue", "red", "#009b00", "purple")
+```
+
+```{r}
+pdf("./Figures/Cohort_3v2_Infection_Start_Quarter.pdf", width = 10, height = 6, onefile = FALSE)
+
+CI <- CI_generator(Infection$InfectionVE, Infection$Lower95, Infection$Upper95)
+infection_plot <- tibble(mean  = Infection$InfectionVE, 
+                         lower = Infection$Lower95,
+                         upper = Infection$Upper95,
+                         VE    = as.character(format(round(Infection$InfectionVE, 3), nsmall = 3)),
+                         CI    = as.character(CI),
+                         design = as.character(Infection$Design),
+                         adjusted = Infection$Adjusted,
+                         test_inclusion = Infection$Incl_PrevQ_Boosted,
+                         study_start = Infection$Start_Quarter,
+                         n = as.character(Infection$n)
+                         )
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(infection_plot$mean))
+  b_clrs = case_when(infection_plot$adjusted == "Y" ~ pal[1], infection_plot$adjusted == "N" ~ pal[2])
+  l_clrs = case_when(infection_plot$adjusted == "Y" ~ pal[1], infection_plot$adjusted == "N" ~ pal[2])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(design = "Design",
+                 adjusted = "Adjusted",
+                 test_inclusion = "Boost In Prior Q",
+                 study_start = "Start Quarter",
+                 fv_restrict = "6mo Since FV",
+                 n = "n",
+                 VE = "VE",
+                 CI = "VE (95% CI)")
+infection_plot <- bind_rows(header, infection_plot)
+plot.new()
+fig <- forestplot(infection_plot, 
+                  fn.ci_norm = fn,
+           labeltext = c(study_start, n, CI), 
+           #title = "Cohort 3 vs 2 Dose Infection VE with Different Non-Matched Designs",
+           title = "",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 3,
+           boxsize = .2,
+           clip = c(-.25, 1),
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(-.25, 0, .25, .5, .75, 1),
+           zero = 0, 
+           hrzl_lines = ForestLines(Infection, "Start_Quarter"),
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))
+           ) %>%
+  fp_set_zebra_style("#EFEFEF")
+legend(x = 0.375, y = 1.22, c("Adjusted", "Unadjusted"), title = "Adjustment", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2]), pch = c(15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+fig
+
+dev.off()
+
+#fig
+```
+
+```{r}
+pdf("./Figures/Cohort_3v2_Severe_Start_Quarter.pdf", width = 10, height = 6, onefile = FALSE)
+
+CI <- CI_generator(Hospitalization$HospVE, Hospitalization$Lower95, Hospitalization$Upper95)
+hosp_plot <- tibble(mean  = Hospitalization$HospVE, 
+                         lower = Hospitalization$Lower95,
+                         upper = Hospitalization$Upper95,
+                         VE    = as.character(format(round(Hospitalization$HospVE, 3), nsmall = 3)),
+                         CI    = as.character(CI),
+                         design = as.character(Hospitalization$Design),
+                         adjusted = Hospitalization$Adjusted,
+                         test_inclusion = Hospitalization$Incl_PrevQ_Boosted,
+                         study_start = Hospitalization$Start_Quarter,
+                         n = as.character(Hospitalization$n)
+                         )
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(hosp_plot$mean))
+  b_clrs = case_when(hosp_plot$adjusted == "Y" ~ pal[1], hosp_plot$adjusted == "N" ~ pal[2])
+  l_clrs = case_when(hosp_plot$adjusted == "Y" ~ pal[1], hosp_plot$adjusted == "N" ~ pal[2])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(design = "Design",
+                 adjusted = "Adjusted",
+                 test_inclusion = "Boost In Prior Q",
+                 study_start = "Start Quarter",
+                 fv_restrict = "6mo Since FV",
+                 n = "n",
+                 VE = "VE",
+                 CI = "VE (95% CI)")
+hosp_plot <- bind_rows(header, hosp_plot)
+plot.new()
+fig <- forestplot(hosp_plot, 
+                  fn.ci_norm = fn,
+           labeltext = c(study_start, n, CI), 
+           #title = "Cohort 3 vs 2 Dose Severe Disease VE with Different Non-Matched Designs",
+           title = "",
+           xlab = "Vaccine Effectiveness (VE)",
+           graph.pos = 3,
+           boxsize = .2,
+           clip = c(-.25, 1),
+           ci.vertices = TRUE,
+           ci.vertices.height = 0.15,
+           xticks = c(-.25, 0, .25, .5, .75, 1),
+           zero = 0, 
+           hrzl_lines = ForestLines(Hospitalization, "Start_Quarter"),
+           col = fpColors(line = "#000000",
+                          box = "#8C808080"),
+           txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))
+           ) %>%
+  fp_set_zebra_style("#EFEFEF")
+legend(x = 0.375, y = 1.22, c("Adjusted", "Unadjusted"), title = "Adjustment", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2]), pch = c(15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+fig
+
+dev.off()
+
+#fig
+```
+
+

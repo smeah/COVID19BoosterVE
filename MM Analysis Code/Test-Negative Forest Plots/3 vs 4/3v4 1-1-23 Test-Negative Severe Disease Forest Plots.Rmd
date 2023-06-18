@@ -1,0 +1,247 @@
+---
+title: "1-1-23 Test-Negative Severe Disease Forest Plots"
+author: "Sabir Meah"
+date: "2023-01-26"
+output: 
+  pdf_document: 
+    keep_md: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(forestplot)
+knitr::opts_chunk$set(fig.width=10, fig.height=8) 
+```
+
+```{r}
+Severe_NonMatched <- read.csv("3v4 Severe Disease Non-Matched Forest Plot.csv") 
+Severe_NonMatched$Start_Quarter <- factor(Severe_NonMatched$Start_Quarter, levels = c("Q4 2021", "Q1 2022", "Q2 2022", "Q3 2022", "Q4 2022"))
+Severe_NonMatched <- Severe_NonMatched %>% 
+  arrange(Start_Quarter, Adjusted, Control_Group) %>%
+  mutate(Design = seq(1, 18, by = 1)) 
+Severe_Matched <- read.csv("3v4 Severe Disease Matched Forest Plot.csv")
+
+Severe_Matched <- Severe_Matched %>%
+  mutate(Method = factor(Method, 
+                         levels = c("Unadj.", "Covar. Adj.", 
+                                    "Exact", "Exact Strat.",
+                                    "Prop. Cal.", "Prop. Cal. Strat.",
+                                    "Prop. Adj.", "Prop + Covar. Adj.",
+                                    "IPW", "IPW Covar. Adj."),
+                         labels = c("Unadj.", "Adj.", 
+                                    "EXM", "EXM-S",
+                                    "PSM", "PSM-S",
+                                    "PSA", "PSA-CA",
+                                    "IPW", "IPW-CA"))) %>%
+  arrange(Method) %>%
+  mutate(Design = 1:nrow(Severe_Matched))
+```
+
+```{r}
+# Old function with only CI
+CI_generator <- function(center, lower, upper){
+  CI <- rep(0, length(center))
+  for(i in 1:length(center)){
+    CI[i] <- paste0("(", 
+                    format(round(lower[i], 3), nsmall = 3), 
+                    ",", 
+                    format(round(upper[i], 3), nsmall = 3), 
+                    ")")
+  }
+  return(CI)
+}
+
+# New function with VE and CI
+CI_generator <- function(center, lower, upper){
+  CI <- rep(0, length(center))
+  for(i in 1:length(center)){
+    CI[i] <- paste0(format(round(center[i], 2), nsmall = 2),
+                    "  ",
+                    "(", 
+                    format(round(lower[i], 2), nsmall = 2), 
+                    ", ", 
+                    format(round(upper[i], 2), nsmall = 2), 
+                    ")")
+  }
+  return(CI)
+}
+```
+
+```{r}
+ForestLines <- function(data, var = "Start_Quarter", linetype = 2){
+  Var_Changes <- data %>%
+  group_by(get(var, data)) %>%
+  summarize(Change = min(Design) + 1) %>%
+  arrange(Change) %>%
+  filter(Change != min(Change))
+
+  var_list <- list()
+  for(i in 1:dim(Var_Changes)[1]){
+    var_list[[as.character(Var_Changes[i,2])]] <- gpar(lty = linetype)
+  }
+  
+  return(var_list)
+}
+```
+
+```{r}
+pal <- c("blue", "red", "#009b00", "purple")
+```
+
+```{r}
+pdf("./Figures/TN_4v3_Severe_Start_Quarter.pdf", width = 10, height = 8, onefile = FALSE)
+
+CI <- CI_generator(Severe_NonMatched$SevereVE, Severe_NonMatched$Lower95, Severe_NonMatched$Upper95)
+severe_plot <- tibble(
+  mean  = Severe_NonMatched$SevereVE, 
+  lower = Severe_NonMatched$Lower95,
+  upper = Severe_NonMatched$Upper95,
+  VE    = as.character(format(round(Severe_NonMatched$SevereVE, 3), nsmall = 3)),
+  CI    = as.character(CI),
+  design = as.character(Severe_NonMatched$Design),
+  control = as.character(Severe_NonMatched$Control_Group),
+  study_start = as.character(Severe_NonMatched$Start_Quarter),
+  adjusted = as.character(Severe_NonMatched$Adjusted),
+  n = as.character(Severe_NonMatched$n)
+)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(severe_plot$mean))
+  b_clrs = case_when(severe_plot$control == 1 ~ pal[1], 
+                     severe_plot$control == 2 ~ pal[2],
+                     severe_plot$control == 3 ~ pal[3])
+  l_clrs = case_when(severe_plot$control == 1 ~ pal[1], 
+                     severe_plot$control == 2 ~ pal[2],
+                     severe_plot$control == 3 ~ pal[3])
+  adjusted_ind <- ifelse(severe_plot$adjusted == "Y", yes = 1, no = 0)
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    if(adjusted_ind[i] == 0){
+      fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+    } else {
+      fpDrawCircleCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+    }
+    
+  }
+})
+header <- tibble(
+  design = "Design",
+  control = "Control",
+  study_start = "Start Quarter",
+  adjusted = "Adjusted",
+  n = "n",
+  VE = "VE",
+  CI = "VE (95% CI)")
+severe_plot <- bind_rows(header, severe_plot)
+plot.new()
+fig <- forestplot(
+  severe_plot, 
+  fn.ci_norm = fn,
+  labeltext = c(study_start, n, CI), 
+  #title = "Test-Negative 4 vs 3 Dose Non-Matched Severe Disease VE",
+  title = "",
+  xlab = "Vaccine Effectiveness (VE)",
+  graph.pos = 3,
+  boxsize = .2,
+  clip = c(-.5, .75),
+  ci.vertices = TRUE,
+  ci.vertices.height = 0.15,
+  xticks = seq(-.5, .75, by = 0.25),
+  zero = 0, 
+  #lwd.zero = NA, # tells plot to hide no effect line
+  hrzl_lines = ForestLines(Severe_NonMatched, "Start_Quarter"),
+  col = fpColors(line = "#000000",
+                box = "#8C808080"),
+  txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+  fp_set_zebra_style("#EFEFEF")
+legend(x = 0.13, y = 1.175, c("Unadjusted", "Adjusted"), title = "Adjusted", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c("black", "black"), pch = c(16,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+legend(x = 0.43, y = 1.175, 
+       c("Test-", "No SD", "Test+ No SD"), title = "Control Group", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+fig 
+
+dev.off()
+
+#fig
+```
+
+```{r}
+pdf("./Figures/TN_4v3_Severe_Matched.pdf", width = 10, height = 8, onefile = FALSE)
+
+CI <- CI_generator(Severe_Matched$SevereVE, Severe_Matched$Lower95, Severe_Matched$Upper95)
+severe_plot <- tibble(
+  mean  = Severe_Matched$SevereVE, 
+  lower = Severe_Matched$Lower95,
+  upper = Severe_Matched$Upper95,
+  VE    = as.character(format(round(Severe_Matched$SevereVE, 3), nsmall = 3)),
+  CI    = as.character(CI),
+  design = as.character(Severe_Matched$Design),
+  control = as.character(Severe_Matched$Control_Group),
+  method = as.character(Severe_Matched$Method),
+  n = as.character(Severe_Matched$n)
+)
+fn <- local({
+  i = 0
+  no_lines <- sum(!is.na(severe_plot$mean))
+  b_clrs = case_when(severe_plot$control == 1 ~ pal[1], 
+                     severe_plot$control == 2 ~ pal[2],
+                     severe_plot$control == 3 ~ pal[3])
+  l_clrs = case_when(severe_plot$control == 1 ~ pal[1], 
+                     severe_plot$control == 2 ~ pal[2],
+                     severe_plot$control == 3 ~ pal[3])
+
+  function(..., clr.line, clr.marker){
+    i <<- i + 1
+    fpDrawNormalCI(..., clr.line = l_clrs[i], clr.marker = b_clrs[i])
+  }
+})
+header <- tibble(
+  design = "Design",
+  control = "Control",
+  method = "Method",
+  n = "n",
+  VE = "VE",
+  CI = "VE (95% CI)")
+severe_plot <- bind_rows(header, severe_plot)
+plot.new()
+fig <- forestplot(
+  severe_plot, 
+  fn.ci_norm = fn,
+  labeltext = c(method, n, CI), 
+  #title = "Test-Negative 4 vs 3 Dose Severe Disease VE With Matched Designs (Q4 2021 Index Date)",
+  title = "",
+  xlab = "Vaccine Effectiveness (VE)",
+  graph.pos = 3,
+  boxsize = .2,
+  clip = c(-.25, .75),
+  ci.vertices = TRUE,
+  ci.vertices.height = 0.15,
+  xticks = seq(-.25, .75, by = 0.25),
+  zero = 0, 
+  #lwd.zero = NA, # tells plot to hide no effect line
+  hrzl_lines = ForestLines(Severe_Matched, "Method"),
+  col = fpColors(line = "#000000",
+                box = "#8C808080"),
+  txt_gp = fpTxtGp(ticks = gpar(cex=1), xlab = gpar(cex = 1))) %>%
+  fp_set_zebra_style("#EFEFEF")
+legend(x = 0.26, y = 1.175, 
+       c("Test-", "No SD", "Test+ No SD"), title = "Control Group", border = "#CCCCCC", box.lwd = 1.5, 
+       col = c(pal[1], pal[2], pal[3]), pch = c(15,15,15), bg = "white", horiz = TRUE, xpd = TRUE) 
+
+fig
+
+dev.off()
+
+fig
+```
+
+
+
+
+
+
+

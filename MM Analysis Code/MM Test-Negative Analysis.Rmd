@@ -1,0 +1,1494 @@
+---
+title: "MM Test-Negative Analysis"
+author: "Sabir Meah"
+date: "2023-06-18"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(MatchIt)
+library(survival)
+library(basecamb)
+library(table1)
+```
+
+# Data Read-In
+
+Data read-in code is omitted as it comprises almost entirely of simply the specific file paths for data files (loaded from .Rsav files using the `load()` function). Unfortunately, the data files cannot be shared publicly because of patient confidentiality. 
+
+# Data Manipulation
+
+```{r}
+# Add hospitalization, ICU, and severe disease variables
+table1in <- table1in %>%
+  mutate(Hospitalized = ifelse(Outcome2 == "Hospitalized / no ICU stay", yes = 1, no = 0)) %>%
+  mutate(ICU = ifelse(Outcome2 == "ICU stay", yes = 1, no = 0)) %>%
+  mutate(Deceased = ifelse(Outcome2 == "Deceased", yes = 1, no = 0)) %>%
+  mutate(SevereDisease = ifelse(Hospitalized == 1 | ICU == 1 | Deceased == 1, yes = 1, no = 0))
+```
+
+```{r}
+# Add fully vaccinated at time of test variable
+table1in <- table1in %>%
+  mutate(FullyVaccinated = ifelse((TotalNumberVaccinations == 2 & FullyVaccinatedWith %in% c("Pfizer", "Moderna")), yes = 1, no = 0))
+```
+
+```{r}
+# Add 1st booster only at time of test variable
+table1in <- table1in %>%
+  mutate(Booster1 = ifelse((TotalNumberVaccinations == 3 & FullyVaccinatedWith %in% c("Pfizer", "Moderna")), yes = 1, no = 0))
+```
+
+```{r}
+# Add 2nd booster at time of test variable
+table1in <- table1in %>%
+  mutate(Booster2 = ifelse((TotalNumberVaccinations == 4 & FullyVaccinatedWith %in% c("Pfizer", "Moderna")), yes = 1, no = 0))
+```
+
+```{r}
+# Add 2nd or more booster at time of test variable
+table1in <- table1in %>%
+  mutate(Booster2_Plus = ifelse((TotalNumberVaccinations >= 4 & FullyVaccinatedWith %in% c("Pfizer", "Moderna")), yes = 1, no = 0))
+```
+
+```{r}
+# Making a binary variable for the test result
+table1in <- table1in %>%
+  mutate(Test_Result = ifelse(`Test Result` == "Positive", yes = 1, no = 0))
+```
+
+```{r}
+# Negative Tests Categories
+negativeTests_Cat <- case_when(table1in$negativeTests == 0 | is.na(table1in$negativeTests) ~ "0",
+                               table1in$negativeTests == 1 ~ "1",
+                               table1in$negativeTests %in% 2:3 ~ "2-3",
+                               table1in$negativeTests %in% 4:5 ~ "4-5",
+                               table1in$negativeTests %in% 6:10 ~ "6-10",
+                               table1in$negativeTests > 10 ~ "11+")
+negativeTests_Cat <- factor(negativeTests_Cat, levels = c("0", "1", "2-3", "4-5", "6-10", "11+"))
+table1in <- table1in %>%
+  mutate(negativeTests_Cat = negativeTests_Cat)
+```
+
+```{r}
+# Filtering to only fully vaccinated or boosted
+table1in <- table1in %>%
+  filter(FullyVaccinated == 1 | Booster == 1)
+```
+
+## Merging with VaxData
+
+```{r}
+# Convert hexdecimal patient IDs to decimal
+table1in$Encrypted_PatientID <- as.numeric(table1in$Encrypted_PatientID)
+```
+
+```{r}
+VaxData <- VaxData %>%
+  left_join(select(CombinedCohorts_Trimmed, c("Encrypted_PatientID", "FirstVaccinatedWith")), by = "Encrypted_PatientID") %>%
+  filter(Vaccine %in% c("Janssen", "Moderna", "Pfizer")) %>%
+  mutate(Difference23 = ifelse(VaccinationNumber == 2 & FirstVaccinatedWith == "Janssen" | VaccinationNumber == 3 & FirstVaccinatedWith %in% c("Moderna", "Pfizer"),
+                                yes = Difference,
+                                no = NA)) %>%
+  mutate(Difference34 = ifelse(VaccinationNumber == 3 & FirstVaccinatedWith == "Janssen" | VaccinationNumber == 4 & FirstVaccinatedWith %in% c("Moderna", "Pfizer"),
+                                yes = Difference,
+                                no = NA)) %>%
+  mutate(FullVaccination = ifelse(VaccinationNumber == 1 & FirstVaccinatedWith == "Janssen" | VaccinationNumber == 2 & FirstVaccinatedWith %in% c("Moderna", "Pfizer"),
+                                yes = 1,
+                                no = 0)) %>%
+  mutate(Booster = ifelse(VaccinationNumber == 2 & FirstVaccinatedWith == "Janssen" | VaccinationNumber == 3 & FirstVaccinatedWith %in% c("Moderna", "Pfizer"),
+                                yes = 1,
+                                no = 0)) %>%
+  mutate(Booster2 = ifelse(VaccinationNumber == 3 & FirstVaccinatedWith == "Janssen" | VaccinationNumber == 4 & FirstVaccinatedWith %in% c("Moderna", "Pfizer"),
+                                yes = 1,
+                                no = 0))
+```
+
+```{r}
+# Variable for result and quarter of vaccination
+YearQuarter_Immune <- case_when(
+  VaxData$YEAR_IMMUNE_DATE == 2020 & VaxData$QUARTER_IMMUNE_DATE == 4 ~ 1,
+  VaxData$YEAR_IMMUNE_DATE == 2021 & VaxData$QUARTER_IMMUNE_DATE == 1 ~ 2,
+  VaxData$YEAR_IMMUNE_DATE == 2021 & VaxData$QUARTER_IMMUNE_DATE == 2 ~ 3,
+  VaxData$YEAR_IMMUNE_DATE == 2021 & VaxData$QUARTER_IMMUNE_DATE == 3 ~ 4,
+  VaxData$YEAR_IMMUNE_DATE == 2021 & VaxData$QUARTER_IMMUNE_DATE == 4 ~ 5,
+  VaxData$YEAR_IMMUNE_DATE == 2022 & VaxData$QUARTER_IMMUNE_DATE == 1 ~ 6,
+  VaxData$YEAR_IMMUNE_DATE == 2022 & VaxData$QUARTER_IMMUNE_DATE == 2 ~ 7,
+  VaxData$YEAR_IMMUNE_DATE == 2022 & VaxData$QUARTER_IMMUNE_DATE == 3 ~ 8,
+  VaxData$YEAR_IMMUNE_DATE == 2022 & VaxData$QUARTER_IMMUNE_DATE == 4 ~ 9,
+  TRUE ~ 0
+)
+```
+
+```{r}
+# Adding above variables to VaxData dataset
+VaxData <- VaxData %>%
+  mutate(YearQuarter_Immune = YearQuarter_Immune) %>%
+  mutate(YearQuarter_FV = ifelse(FullVaccination == 1, yes = YearQuarter_Immune, no = NA)) %>%
+  mutate(YearQuarter_Booster = ifelse(Booster == 1, yes = YearQuarter_Immune, no = NA)) %>%
+  mutate(YearQuarter_Booster2 = ifelse(Booster2 == 1, yes = YearQuarter_Immune, no = NA))
+```
+
+```{r}
+table1in <- table1in %>%
+  left_join(filter(select(VaxData, c("Encrypted_PatientID", "YearQuarter_FV")), !is.na(YearQuarter_FV)), 
+          by = "Encrypted_PatientID") %>%
+  left_join(filter(select(VaxData, c("Encrypted_PatientID", "YearQuarter_Booster")), !is.na(YearQuarter_Booster)), 
+          by = "Encrypted_PatientID") %>%
+  left_join(filter(select(VaxData, c("Encrypted_PatientID", "YearQuarter_Booster2")), !is.na(YearQuarter_Booster2)), 
+          by = "Encrypted_PatientID")
+```
+
+```{r}
+table1in <- table1in %>%
+  mutate(YearQuarter_Test = case_when(
+    Quarter == "2020/Q4" ~ 1,
+    Quarter == "2021/Q1" ~ 2,
+    Quarter == "2021/Q2" ~ 3,
+    Quarter == "2021/Q3" ~ 4,
+    Quarter == "2021/Q4" ~ 5,
+    Quarter == "2022/Q1" ~ 6,
+    Quarter == "2022/Q2" ~ 7,
+    Quarter == "2022/Q3" ~ 8,
+    Quarter == "2022/Q4" ~ 9,
+    TRUE ~ NA_real_
+  ))
+```
+
+## Merging With Charlson Score
+
+```{r}
+# Merge with Charlson score data
+CharlsonScoreCombined$Encrypted_PatientID <- as.numeric(CharlsonScoreCombined$Encrypted_PatientID)
+table1in <- table1in %>%
+  left_join(select(CharlsonScoreCombined, c("Encrypted_PatientID", "score", "index")), 
+            by = "Encrypted_PatientID")
+```
+
+## Table 1 Data
+
+```{r}
+# Making variable for first test in study period
+IDs <- c()
+FirstTestInSP <- rep(-1, nrow(table1in))
+for (i in 1:nrow(table1in)){
+  if(table1in$Encrypted_PatientID[i] %in% IDs){
+    FirstTestInSP[i] <- 0
+  } else {
+    FirstTestInSP[i] <- 1
+    IDs <- append(IDs, table1in$Encrypted_PatientID[i])
+  }
+}
+
+# Making full Table 1 Data
+table1_data <- table1in %>%
+  mutate(FirstTestInSP = FirstTestInSP) %>%
+  filter(FirstTestInSP == 1) %>%
+  filter(PastCOVIDInfection == "No") %>%
+  filter(Quarter %in% c("2021/Q4", "2022/Q1", "2022/Q2", "2022/Q3", "2022/Q4")) %>%
+  filter(!is.na(Booster) & !is.na(Booster1) & !is.na(Age) & !is.na(Sex) & !is.na(BMI) & !is.na(BMI_category) & !is.na(RaceEthnicity4) & !is.na(NDIwithoutProportionBlack) & !is.na(PersonsPerSquareMile) & !is.na(HealthCareWorker) & !is.na(index) & !is.na(PrimaryCareMM_YN) & !is.na(negativeTests_Cat) & !is.na(Quarter))
+```
+
+```{r}
+t1i_FV <- table1in %>%
+  filter(FullyVaccinated == 1) %>%
+  filter(PastCOVIDInfection == "No") %>%
+  filter(Quarter %in% c("2021/Q4", "2022/Q1", "2022/Q2", "2022/Q3", "2022/Q4")) %>%
+  filter(!is.na(Booster) & !is.na(Booster1) & !is.na(Age) & !is.na(Sex) & !is.na(BMI) & !is.na(BMI_category) & !is.na(RaceEthnicity4) & !is.na(NDIwithoutProportionBlack) & !is.na(PersonsPerSquareMile) & !is.na(HealthCareWorker) & !is.na(index) & !is.na(PrimaryCareMM_YN) & !is.na(negativeTests_Cat) & !is.na(Quarter))
+
+IDs <- c()
+FirstTestInSP <- rep(-1, nrow(t1i_FV))
+for (i in 1:nrow(t1i_FV)){
+  if(t1i_FV$Encrypted_PatientID[i] %in% IDs){
+    FirstTestInSP[i] <- 0
+  } else {
+    FirstTestInSP[i] <- 1
+    IDs <- append(IDs, t1i_FV$Encrypted_PatientID[i])
+  }
+}
+
+table1_FV <- t1i_FV %>%
+  mutate(FirstTestInSP = FirstTestInSP) %>%
+  filter(FirstTestInSP == 1)
+```
+
+```{r}
+t1i_Boost1 <- table1in %>%
+  filter(Booster1 == 1) %>%
+  filter(PastCOVIDInfection == "No") %>%
+  filter(Quarter %in% c("2021/Q4", "2022/Q1", "2022/Q2", "2022/Q3", "2022/Q4")) %>%
+  filter(!is.na(Booster) & !is.na(Booster1) & !is.na(Age) & !is.na(Sex) & !is.na(BMI) & !is.na(BMI_category) & !is.na(RaceEthnicity4) & !is.na(NDIwithoutProportionBlack) & !is.na(PersonsPerSquareMile) & !is.na(HealthCareWorker) & !is.na(index) & !is.na(PrimaryCareMM_YN) & !is.na(negativeTests_Cat) & !is.na(Quarter))
+
+IDs <- c()
+FirstTestInSP <- rep(-1, nrow(t1i_Boost1))
+for (i in 1:nrow(t1i_Boost1)){
+  if(t1i_Boost1$Encrypted_PatientID[i] %in% IDs){
+    FirstTestInSP[i] <- 0
+  } else {
+    FirstTestInSP[i] <- 1
+    IDs <- append(IDs, t1i_Boost1$Encrypted_PatientID[i])
+  }
+}
+
+table1_Boost1 <- t1i_Boost1 %>%
+  mutate(FirstTestInSP = FirstTestInSP) %>%
+  filter(FirstTestInSP == 1)
+```
+
+
+```{r}
+t1i_Boost2_Plus <- table1in %>%
+  filter(Booster2_Plus == 1) %>%
+  filter(PastCOVIDInfection == "No") %>%
+  filter(Quarter %in% c("2022/Q2", "2022/Q3", "2022/Q4")) %>%
+  filter(!is.na(Booster) & !is.na(Booster1) & !is.na(Age) & !is.na(Sex) & !is.na(BMI) & !is.na(BMI_category) & !is.na(RaceEthnicity4) & !is.na(NDIwithoutProportionBlack) & !is.na(PersonsPerSquareMile) & !is.na(HealthCareWorker) & !is.na(index) & !is.na(PrimaryCareMM_YN) & !is.na(negativeTests_Cat) & !is.na(Quarter))
+
+IDs <- c()
+FirstTestInSP <- rep(-1, nrow(t1i_Boost2_Plus))
+for (i in 1:nrow(t1i_Boost2_Plus)){
+  if(t1i_Boost2_Plus$Encrypted_PatientID[i] %in% IDs){
+    FirstTestInSP[i] <- 0
+  } else {
+    FirstTestInSP[i] <- 1
+    IDs <- append(IDs, t1i_Boost2_Plus$Encrypted_PatientID[i])
+  }
+}
+
+table1_Boost2_Plus <- t1i_Boost2_Plus %>%
+  mutate(FirstTestInSP = FirstTestInSP) %>%
+  filter(FirstTestInSP == 1)
+```
+
+
+
+## 3 Different Inclusion Criteria
+
+```{r, eval = TRUE}
+table1in <- table1in %>%
+  #filter(FullyVaccinated == 1 | Booster1 == 1) %>%
+  #filter(FullyVaccinated == 1 & Quarter - YearQuarter_FV < 4 | Booster1 == 1 & YearQuarter_Test - YearQuarter_Booster < 2) %>%
+  filter(FullyVaccinated == 1 | Booster1 == 1 & YearQuarter_Test - YearQuarter_Booster < 2)
+```
+
+```{r, eval = FALSE}
+table1in <- table1in %>%
+  filter(FullyVaccinated == 1 | Booster == 1) %>%
+  mutate(Booster1 = Booster)
+```
+
+```{r, eval = FALSE}
+table1in <- table1in %>%
+  filter(Booster1 == 1 | Booster2 == 1) %>%
+  mutate(Booster1 = Booster2) %>%
+  filter(Quarter %in% c("2022/Q2", "2022/Q3", "2022/Q4"))
+```
+
+```{r, eval = FALSE}
+table1in <- table1in %>%
+  filter(Booster1 == 1 | Booster2_Plus == 1) %>%
+  mutate(Booster1 = Booster2_Plus) %>%
+  filter(Quarter %in% c("2022/Q2", "2022/Q3", "2022/Q4"))
+```
+ 
+
+## Different Study Periods
+
+```{r}
+# Datasets restricted to study periods
+AllVax <- table1in %>%
+#  filter(FullyVaccinated == 1 | Booster1 == 1) %>%
+  filter(Booster2 == 0) %>%
+  filter(PastCOVIDInfection == "No") %>%
+  filter(!is.na(Booster) & !is.na(Booster1) & !is.na(Age) & !is.na(Sex) & !is.na(BMI) & !is.na(BMI_category) & !is.na(RaceEthnicity4) & !is.na(NDIwithoutProportionBlack) & !is.na(PersonsPerSquareMile) & !is.na(HealthCareWorker) & !is.na(index) & !is.na(PrimaryCareMM_YN) & !is.na(negativeTests_Cat) & !is.na(Quarter))
+
+TN_Q42021 <- table1in %>%
+#  filter(FullyVaccinated == 1 | Booster1 == 1) %>%
+  filter(Booster2 == 0) %>%
+  filter(PastCOVIDInfection == "No") %>%
+  filter(Quarter %in% c("2021/Q4", "2022/Q1", "2022/Q2", "2022/Q3", "2022/Q4")) %>%
+  filter(!is.na(Booster) & !is.na(Booster1) & !is.na(Age) & !is.na(Sex) & !is.na(BMI) & !is.na(BMI_category) & !is.na(RaceEthnicity4) & !is.na(NDIwithoutProportionBlack) & !is.na(PersonsPerSquareMile) & !is.na(HealthCareWorker) & !is.na(index) & !is.na(PrimaryCareMM_YN) & !is.na(negativeTests_Cat) & !is.na(Quarter)) 
+StudyPeriod <- TN_Q42021
+
+TN_Q12022 <- table1in %>%
+#  filter(FullyVaccinated == 1 | Booster1 == 1) %>%
+  filter(Booster2 == 0) %>%
+  filter(PastCOVIDInfection == "No") %>%
+  filter(Quarter %in% c("2022/Q1", "2022/Q2", "2022/Q3", "2022/Q4")) %>%
+  filter(!is.na(Booster) & !is.na(Booster1) & !is.na(Age) & !is.na(Sex) & !is.na(BMI) & !is.na(BMI_category) & !is.na(RaceEthnicity4) & !is.na(NDIwithoutProportionBlack) & !is.na(PersonsPerSquareMile) & !is.na(HealthCareWorker) & !is.na(index) & !is.na(PrimaryCareMM_YN) & !is.na(negativeTests_Cat) & !is.na(Quarter))
+
+TN_Q22022 <- table1in %>%
+#  filter(FullyVaccinated == 1 | Booster1 == 1) %>%
+  filter(Booster2 == 0) %>%
+  filter(PastCOVIDInfection == "No") %>%
+  filter(Quarter %in% c("2022/Q2", "2022/Q3", "2022/Q4")) %>%
+  filter(!is.na(Booster) & !is.na(Booster1) & !is.na(Age) & !is.na(Sex) & !is.na(BMI) & !is.na(BMI_category) & !is.na(RaceEthnicity4) & !is.na(NDIwithoutProportionBlack) & !is.na(PersonsPerSquareMile) & !is.na(HealthCareWorker) & !is.na(index) & !is.na(PrimaryCareMM_YN) & !is.na(negativeTests_Cat) & !is.na(Quarter)) 
+
+TN_Q32022 <- table1in %>%
+#  filter(FullyVaccinated == 1 | Booster1 == 1) %>%
+  filter(Booster2 == 0) %>%
+  filter(PastCOVIDInfection == "No") %>%
+  filter(Quarter %in% c("2022/Q3", "2022/Q4")) %>%
+  filter(!is.na(Booster) & !is.na(Booster1) & !is.na(Age) & !is.na(Sex) & !is.na(BMI) & !is.na(BMI_category) & !is.na(RaceEthnicity4) & !is.na(NDIwithoutProportionBlack) & !is.na(PersonsPerSquareMile) & !is.na(HealthCareWorker) & !is.na(index) & !is.na(PrimaryCareMM_YN) & !is.na(negativeTests_Cat) & !is.na(Quarter))
+
+TN_Q42022 <- table1in %>%
+#  filter(FullyVaccinated == 1 | Booster1 == 1) %>%
+  filter(Booster2 == 0) %>%
+  filter(PastCOVIDInfection == "No") %>%
+  filter(Quarter %in% c("2022/Q4")) %>%
+  filter(!is.na(Booster) & !is.na(Booster1) & !is.na(Age) & !is.na(Sex) & !is.na(BMI) & !is.na(BMI_category) & !is.na(RaceEthnicity4) & !is.na(NDIwithoutProportionBlack) & !is.na(PersonsPerSquareMile) & !is.na(HealthCareWorker) & !is.na(index) & !is.na(PrimaryCareMM_YN) & !is.na(negativeTests_Cat) & !is.na(Quarter))
+```
+
+```{r}
+# With only severe disease and test negatives
+TN_Q42021_SevereDisease_OrNeg <- TN_Q42021 %>%
+  filter(SevereDisease == 1 | Test_Result == 0)
+# With only test positives
+TN_Q42021_PositiveOnly <- TN_Q42021 %>%
+  filter(Test_Result == 1)
+
+# With only severe disease and test negatives
+TN_Q12022_SevereDisease_OrNeg <- TN_Q12022 %>%
+  filter(SevereDisease == 1 | Test_Result == 0)
+# With only test positives
+TN_Q12022_PositiveOnly <- TN_Q12022 %>%
+  filter(Test_Result == 1)
+
+# With only severe disease and test negatives
+TN_Q22022_SevereDisease_OrNeg <- TN_Q22022 %>%
+  filter(SevereDisease == 1 | Test_Result == 0)
+# With only test positives
+TN_Q22022_PositiveOnly <- TN_Q22022 %>%
+  filter(Test_Result == 1)
+
+# With only severe disease and test negatives
+TN_Q32022_SevereDisease_OrNeg <- TN_Q32022 %>%
+  filter(SevereDisease == 1 | Test_Result == 0)
+# With only test positives
+TN_Q32022_PositiveOnly <- TN_Q32022 %>%
+  filter(Test_Result == 1)
+
+# With only severe disease and test negatives
+TN_Q42022_SevereDisease_OrNeg <- TN_Q42022 %>%
+  filter(SevereDisease == 1 | Test_Result == 0)
+# With only test positives
+TN_Q42022_PositiveOnly <- TN_Q42022 %>%
+  filter(Test_Result == 1)
+```
+
+
+```{r}
+TN_Q42021_Only <- table1in %>%
+#  filter(FullyVaccinated == 1 | Booster1 == 1) %>%
+  filter(Booster2 == 0) %>%
+  filter(PastCOVIDInfection == "No") %>%
+  filter(Quarter %in% c("2021/Q4")) %>%
+  filter(!is.na(Booster) & !is.na(Booster1) & !is.na(Age) & !is.na(Sex) & !is.na(BMI) & !is.na(BMI_category) & !is.na(RaceEthnicity4) & !is.na(NDIwithoutProportionBlack) & !is.na(PersonsPerSquareMile) & !is.na(HealthCareWorker) & !is.na(index) & !is.na(PrimaryCareMM_YN) & !is.na(negativeTests_Cat) & !is.na(Quarter))
+TN_Q12022_Only <- table1in %>%
+#  filter(FullyVaccinated == 1 | Booster1 == 1) %>%
+  filter(Booster2 == 0) %>%
+  filter(PastCOVIDInfection == "No") %>%
+  filter(Quarter %in% c("2022/Q1")) %>%
+  filter(!is.na(Booster) & !is.na(Booster1) & !is.na(Age) & !is.na(Sex) & !is.na(BMI) & !is.na(BMI_category) & !is.na(RaceEthnicity4) & !is.na(NDIwithoutProportionBlack) & !is.na(PersonsPerSquareMile) & !is.na(HealthCareWorker) & !is.na(index) & !is.na(PrimaryCareMM_YN) & !is.na(negativeTests_Cat) & !is.na(Quarter))
+TN_Q22022_Only <- table1in %>%
+#  filter(FullyVaccinated == 1 | Booster1 == 1) %>%
+  filter(Booster2 == 0) %>%
+  filter(PastCOVIDInfection == "No") %>%
+  filter(Quarter %in% c("2022/Q2")) %>%
+  filter(!is.na(Booster) & !is.na(Booster1) & !is.na(Age) & !is.na(Sex) & !is.na(BMI) & !is.na(BMI_category) & !is.na(RaceEthnicity4) & !is.na(NDIwithoutProportionBlack) & !is.na(PersonsPerSquareMile) & !is.na(HealthCareWorker) & !is.na(index) & !is.na(PrimaryCareMM_YN) & !is.na(negativeTests_Cat) & !is.na(Quarter))
+TN_Q32022_Only <- table1in %>%
+#  filter(FullyVaccinated == 1 | Booster1 == 1) %>%
+  filter(Booster2 == 0) %>%
+  filter(PastCOVIDInfection == "No") %>%
+  filter(Quarter %in% c("2022/Q3")) %>%
+  filter(!is.na(Booster) & !is.na(Booster1) & !is.na(Age) & !is.na(Sex) & !is.na(BMI) & !is.na(BMI_category) & !is.na(RaceEthnicity4) & !is.na(NDIwithoutProportionBlack) & !is.na(PersonsPerSquareMile) & !is.na(HealthCareWorker) & !is.na(index) & !is.na(PrimaryCareMM_YN) & !is.na(negativeTests_Cat) & !is.na(Quarter))
+TN_Q42022_Only <- TN_Q42022
+```
+
+
+## Additional Designs for Q4 2021
+
+```{r, eval = FALSE}
+# Making variable for first test in study period
+IDs <- c()
+FirstTestInSP <- rep(-1, nrow(StudyPeriod))
+for (i in 1:nrow(StudyPeriod)){
+  if(StudyPeriod$Encrypted_PatientID[i] %in% IDs){
+    FirstTestInSP[i] <- 0
+  } else {
+    FirstTestInSP[i] <- 1
+    IDs <- append(IDs, StudyPeriod$Encrypted_PatientID[i])
+  }
+}
+
+# Adding variable to StudyPeriod dataframe
+StudyPeriod <- StudyPeriod %>%
+  mutate(FirstTestInSP = FirstTestInSP)
+
+# Making first test in study period dataframe
+StudyPeriod_FirstTest <- StudyPeriod %>%
+  filter(FirstTestInSP == 1)
+
+# First test in study period and 6 months since fully vaccinated
+StudyPeriod_FirstTest6 <- StudyPeriod_FirstTest %>%
+  filter(TimeSinceFullyVaccinated2 == "[6,99)")
+```
+
+```{r}
+# Making dataframe with only those 6 months since fully vaccinated
+StudyPeriod6 <- StudyPeriod %>%
+  filter(TimeSinceFullyVaccinated2 == "[6,99)")
+```
+
+```{r}
+# With only severe disease and test negatives
+StudyPeriod_SevereDisease_OrNeg <- StudyPeriod %>%
+  filter(SevereDisease == 1 | Test_Result == 0)
+
+# With only test positives
+StudyPeriod_PositiveOnly <- StudyPeriod %>%
+  filter(Test_Result == 1)
+```
+
+# Table 1
+
+```{r}
+table1(~ Age + AgeCategory + Sex + BMI + BMI_category + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + score + index + PrimaryCareMM_YN + negativeTests + negativeTests_Cat,
+       data = table1_data)
+
+table1(~ Age + AgeCategory + Sex + BMI + BMI_category + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + score + index + PrimaryCareMM_YN + negativeTests + negativeTests_Cat,
+       data = t1i_FV)
+
+table1(~ Age + AgeCategory + Sex + BMI + BMI_category + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + score + index + PrimaryCareMM_YN + negativeTests + negativeTests_Cat,
+       data = t1i_Boost1)
+
+table1(~ Age + AgeCategory + Sex + BMI + BMI_category + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + score + index + PrimaryCareMM_YN + negativeTests + negativeTests_Cat,
+       data = t1i_Boost2_Plus)
+```
+
+
+
+# Modeling 
+
+## Extraction Function
+
+```{r}
+TN_mod_extraction <- function(mod){
+  n <- nobs(mod)
+  summary <- or_model_summary(mod)
+  VE <- 1 - summary[2, "adj_OR"]
+  Lower95 <- 1 - summary[2, "up_ci"]
+  Upper95 <- 1 - summary[2, "low_ci"]
+  res <- c(n, VE, Lower95, Upper95)
+  return(res)
+}
+```
+
+## Different Study Periods
+
+```{r}
+# Unadjusted
+summary(glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42021))
+```
+
+
+```{r}
+# Adjusted
+summary(glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q42021))
+```
+
+```{r}
+forest_study_periods <- rbind.data.frame(
+  TN_mod_extraction(glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42021)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q42021)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q12022)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q12022)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q22022)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q22022)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q32022)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q32022)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42022)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat, family = binomial(link = 'logit'), data = TN_Q42022))
+)
+```
+
+```{r}
+forest_quarter_only <- rbind.data.frame(
+  TN_mod_extraction(glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42021_Only)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat, family = binomial(link = 'logit'), data = TN_Q42021_Only)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q12022_Only)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat, family = binomial(link = 'logit'), data = TN_Q12022_Only)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q22022_Only)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat, family = binomial(link = 'logit'), data = TN_Q22022_Only)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q32022_Only)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat, family = binomial(link = 'logit'), data = TN_Q32022_Only)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42022_Only)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat, family = binomial(link = 'logit'), data = TN_Q42022_Only))
+)
+```
+
+## Matching
+
+### Model Extraction Function
+
+```{r}
+mod_extraction <- function(mod){
+  n <- mod$n
+  summary <- summary(mod)
+  VE <- 1 - summary$conf.int[1,"exp(coef)"]
+  Lower95 <- 1 - summary$conf.int[1, "upper .95"]
+  Upper95 <- 1 - summary$conf.int[1, "lower .95"]
+  res <- c(n, VE, Lower95, Upper95)
+  return(res)
+}
+```
+
+### Complete Cases Datasets
+
+```{r}
+TN_Q42021_CC <- TN_Q42021 %>%
+  filter(!is.na(Booster) & !is.na(Booster1) & !is.na(Age) & !is.na(Sex) & !is.na(BMI) & !is.na(BMI_category) & !is.na(RaceEthnicity4) & !is.na(NDIwithoutProportionBlack) & !is.na(PersonsPerSquareMile) & !is.na(HealthCareWorker) & !is.na(index) & !is.na(PrimaryCareMM_YN) & !is.na(negativeTests_Cat) & !is.na(Quarter))
+```
+
+```{r}
+TN_Q22022_CC <- TN_Q22022 %>%
+  filter(!is.na(Booster) & !is.na(Booster1) & !is.na(Age) & !is.na(Sex) & !is.na(BMI) & !is.na(BMI_category) & !is.na(RaceEthnicity4) & !is.na(NDIwithoutProportionBlack) & !is.na(PersonsPerSquareMile) & !is.na(HealthCareWorker) & !is.na(index) & !is.na(PrimaryCareMM_YN) & !is.na(negativeTests_Cat) & !is.na(Quarter))
+```
+
+### Propensity Score Generation
+
+```{r}
+TN_Propensity_ForBooster_Mod <- glm(Booster1 ~ Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q42021_CC)
+
+TN_Q42021_PropensityScores <- TN_Q42021_CC %>%
+  mutate(Propensity_ForBooster = predict(TN_Propensity_ForBooster_Mod, type = "response")) %>%
+  mutate(IPW_ForBooster = ifelse(Booster == 1, yes = 1 / Propensity_ForBooster, no = 1 / (1 - Propensity_ForBooster)))
+```
+
+```{r}
+TN_Propensity_ForBooster_Mod_Q22022 <- glm(Booster1 ~ Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q22022_CC)
+
+TN_Q22022_PropensityScores <- TN_Q22022_CC %>%
+  mutate(Propensity_ForBooster = predict(TN_Propensity_ForBooster_Mod_Q22022, type = "response")) %>%
+  mutate(IPW_ForBooster = ifelse(Booster == 1, yes = 1 / Propensity_ForBooster, no = 1 / (1 - Propensity_ForBooster)))
+```
+
+
+### Exact Matching
+
+```{r}
+TN_Q42021_Exact <- matchit(Booster1 ~ AgeCategory + Sex + BMI_category + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter,
+                           data = TN_Q42021_CC,
+                           method = "exact") %>%
+  match.data()
+```
+
+```{r}
+TN_Q22022_Exact <- matchit(Booster1 ~ AgeCategory + Sex + BMI_category + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter,
+                           data = TN_Q22022_CC,
+                           method = "exact") %>%
+  match.data()
+```
+
+
+### Propensity Caliper Matching
+
+```{r}
+TN_Q42021_PropensityCaliper <- matchit(
+  Booster1 ~ AgeCategory + Sex + BMI_category + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter,
+  data = TN_Q42021_CC,
+  method = "nearest",
+  distance = "glm",
+  caliper = 0.2,
+  std.caliper = TRUE
+) %>%
+  match.data() %>%
+  mutate(ipw = ifelse(Booster == 1, yes = 1 / distance, no = 1 / (1 - distance)))
+```
+
+```{r}
+TN_Q22022_PropensityCaliper <- matchit(
+  Booster1 ~ AgeCategory + Sex + BMI_category + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter,
+  data = TN_Q22022_CC,
+  method = "nearest",
+  distance = "glm",
+  caliper = 0.2,
+  std.caliper = TRUE
+) %>%
+  match.data() %>%
+  mutate(ipw = ifelse(Booster == 1, yes = 1 / distance, no = 1 / (1 - distance)))
+```
+
+
+### Models
+
+#### Exact Matching
+
+##### Q4 2021
+
+```{r}
+summary(clogit(Test_Result ~ Booster1 + strata(subclass), data = TN_Q42021_Exact))
+```
+
+##### Q2 2022
+
+```{r}
+summary(clogit(Test_Result ~ Booster1 + strata(subclass), data = TN_Q22022_Exact))
+```
+
+```{r}
+#summary(glmer(Test_Result ~ Booster1 + 1|subclass, 
+#      family = "binomial", 
+#      data = TN_Q22022_Exact,
+#      nAGQ = 0))
+```
+
+
+#### Propensity Score Caliper Matching
+
+```{r}
+summary(clogit(Test_Result ~ Booster1 + strata(subclass), data = TN_Q42021_PropensityCaliper))
+```
+
+```{r}
+summary(clogit(Test_Result ~ Booster1 + strata(subclass), data = TN_Q22022_PropensityCaliper))
+```
+
+#### Propensity Score Adjustment
+
+```{r}
+summary(glm(Test_Result ~ Booster1 + Propensity_ForBooster, family = binomial(link = 'logit'), data = TN_Q42021_PropensityScores))
+```
+
+```{r}
+# Fully Adjusted
+summary(glm(Test_Result ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q42021_PropensityScores))
+```
+
+#### IPW
+
+```{r}
+summary(glm(Test_Result ~ Booster1 + Propensity_ForBooster, 
+            family = binomial(link = 'logit'), 
+            weights = IPW_ForBooster,
+            data = TN_Q42021_PropensityScores))
+```
+
+```{r}
+# Fully Adjusted
+summary(glm(Test_Result ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, 
+            family = binomial(link = 'logit'),
+            weights = IPW_ForBooster,
+            data = TN_Q42021_PropensityScores))
+```
+
+### Model Extraction
+
+```{r}
+forest_TN_Q42021_matched <- rbind.data.frame(
+  TN_mod_extraction(glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42021)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q42021)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42021_Exact)),
+  mod_extraction(clogit(Test_Result ~ Booster1 + strata(subclass), data = TN_Q42021_Exact)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42021_PropensityCaliper)),
+  mod_extraction(clogit(Test_Result ~ Booster1 + strata(subclass), data = TN_Q42021_PropensityCaliper)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Propensity_ForBooster, family = binomial(link = 'logit'), data = TN_Q42021_PropensityScores)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q42021_PropensityScores)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Propensity_ForBooster, 
+            family = binomial(link = 'logit'), 
+            weights = IPW_ForBooster,
+            data = TN_Q42021_PropensityScores)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, 
+            family = binomial(link = 'logit'),
+            weights = IPW_ForBooster,
+            data = TN_Q42021_PropensityScores))
+)
+```
+
+```{r}
+forest_TN_Q22022_matched <- rbind.data.frame(
+  TN_mod_extraction(glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q22022)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q22022)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q22022_Exact)),
+  mod_extraction(clogit(Test_Result ~ Booster1 + strata(subclass), data = TN_Q22022_Exact)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q22022_PropensityCaliper)),
+  mod_extraction(clogit(Test_Result ~ Booster1 + strata(subclass), data = TN_Q22022_PropensityCaliper)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Propensity_ForBooster, family = binomial(link = 'logit'), data = TN_Q22022_PropensityScores)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q22022_PropensityScores)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Propensity_ForBooster, 
+            family = binomial(link = 'logit'), 
+            weights = IPW_ForBooster,
+            data = TN_Q22022_PropensityScores)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, 
+            family = binomial(link = 'logit'),
+            weights = IPW_ForBooster,
+            data = TN_Q22022_PropensityScores))
+)
+```
+
+## Severe Disease
+
+### Extraction Function
+
+```{r}
+control_grp3_extraction <- function(infection_mod, severe_mod, clogit = FALSE){
+  if(clogit == TRUE){
+    index <- 1
+    n <- severe_mod$n
+  } else {
+    index <- 2
+    n <- nobs(severe_mod)
+  }
+  
+  coef_infect <- coef(infection_mod)[index]
+  coef_severe <- coef(severe_mod)[index]
+  var_infect <- vcov(infection_mod)[index,index]
+  var_severe <- vcov(severe_mod)[index,index]
+  exp_var_infect <- var_infect * exp(coef_infect)
+  exp_var_severe <- var_severe * exp(coef_severe)
+  
+  #var_new <- coef_infect^2 * var_severe + coef_severe^2 * var_infect + var_infect * var_severe
+  var_new <- exp(coef_infect)^2 * exp_var_severe + exp(coef_severe)^2 * exp_var_infect + exp_var_infect * exp_var_severe
+  se_new <- sqrt(var_new)
+  coef_new <- coef_infect * coef_severe
+  or_new <- exp(coef_new)
+  
+  #exp_var_new <- var_new * exp(coef_infect * coef_severe)
+  #exp_sd_new <- sqrt(exp_var_new)
+  
+  ve_new <- 1 - exp(coef_infect) * exp(coef_severe)
+  #Lower95 <- 1 - (ve_new - 1.96 * exp_sd_new)
+  #Upper95 <- 1 - (ve_new + 1.96 * exp_sd_new)
+  Lower95 <- 1 - (ve_new - 1.96 * se_new)
+  Upper95 <- 1 - (ve_new + 1.96 * se_new)
+  #Lower95 <- 1 - (or_new + 1.96 * or_new * se_new)
+  #Upper95 <- 1 - (or_new + 1.96 * or_new * se_new)
+  
+  #Lower95 <- exp(coef_new + 1.96 * se_new)
+  #Upper95 <- exp(coef_new - 1.96 * se_new)
+  
+  return(c(n, ve_new, 1 - Lower95, 1 - Upper95))
+}
+```
+
+### Different Study Periods
+
+```{r}
+forest_severe_study_periods <- rbind.data.frame(
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42021)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q42021)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q12022)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q12022)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q22022)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q22022)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q32022)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q32022)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42022)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat, family = binomial(link = 'logit'), data = TN_Q42022)),
+  
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42021_SevereDisease_OrNeg)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q42021_SevereDisease_OrNeg)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q12022_SevereDisease_OrNeg)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q12022_SevereDisease_OrNeg)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q22022_SevereDisease_OrNeg)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q22022_SevereDisease_OrNeg)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q32022_SevereDisease_OrNeg)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q32022_SevereDisease_OrNeg)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42022_SevereDisease_OrNeg)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat, family = binomial(link = 'logit'), data = TN_Q42022_SevereDisease_OrNeg)),
+  
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42021),
+    glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42021_PositiveOnly)
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q42021),
+    glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q42021_PositiveOnly)
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q12022),
+    glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q12022_PositiveOnly)
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q12022),
+    glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q12022_PositiveOnly)
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q22022),
+    glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q22022_PositiveOnly)
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q22022),
+    glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q22022_PositiveOnly)
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q32022),
+    glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q32022_PositiveOnly)
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q32022),
+    glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q32022_PositiveOnly)
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42022),
+    glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42022_PositiveOnly)
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat, family = binomial(link = 'logit'), data = TN_Q42022),
+    glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat, family = binomial(link = 'logit'), data = TN_Q42022_PositiveOnly)
+  )
+)
+```
+
+### Datasets
+
+```{r}
+TN_Q42021_CC <- TN_Q42021 %>%
+  filter(!is.na(Booster) & !is.na(Booster1) & !is.na(Age) & !is.na(Sex) & !is.na(BMI) & !is.na(BMI_category) & !is.na(RaceEthnicity4) & !is.na(NDIwithoutProportionBlack) & !is.na(PersonsPerSquareMile) & !is.na(HealthCareWorker) & !is.na(index) & !is.na(PrimaryCareMM_YN) & !is.na(negativeTests_Cat) & !is.na(Quarter))
+```
+
+```{r}
+TN_Q22022_CC <- TN_Q22022 %>%
+  filter(!is.na(Booster) & !is.na(Booster1) & !is.na(Age) & !is.na(Sex) & !is.na(BMI) & !is.na(BMI_category) & !is.na(RaceEthnicity4) & !is.na(NDIwithoutProportionBlack) & !is.na(PersonsPerSquareMile) & !is.na(HealthCareWorker) & !is.na(index) & !is.na(PrimaryCareMM_YN) & !is.na(negativeTests_Cat) & !is.na(Quarter))
+```
+
+```{r}
+# With only severe disease and test negatives
+TN_Q42021_SevereDisease_OrNeg <- TN_Q42021_CC %>%
+  filter(SevereDisease == 1 | Test_Result == 0)
+
+# With only test positives
+TN_Q42021_PositiveOnly <- TN_Q42021_CC %>%
+  filter(Test_Result == 1)
+```
+
+#### Propensity Score Generation
+
+```{r}
+SevereDisease_OrNeg_Propensity_Q42021_ForBooster_Mod <- glm(Booster1 ~ Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q42021_SevereDisease_OrNeg)
+
+SevereDisease_OrNeg_Q42021_PropensityScores <- TN_Q42021_SevereDisease_OrNeg %>%
+  mutate(Propensity_ForBooster = predict(SevereDisease_OrNeg_Propensity_Q42021_ForBooster_Mod, type = "response")) %>%
+  mutate(IPW_ForBooster = ifelse(Booster == 1, yes = 1 / Propensity_ForBooster, no = 1 / (1 - Propensity_ForBooster)))
+```
+
+```{r}
+PositiveOnly_Propensity_Q42021_ForBooster_Mod <- glm(Booster1 ~ Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q42021_PositiveOnly)
+
+PositiveOnly_Q42021_PropensityScores <- TN_Q42021_PositiveOnly %>%
+  mutate(Propensity_ForBooster = predict(PositiveOnly_Propensity_Q42021_ForBooster_Mod, type = "response")) %>%
+  mutate(IPW_ForBooster = ifelse(Booster == 1, yes = 1 / Propensity_ForBooster, no = 1 / (1 - Propensity_ForBooster)))
+```
+
+#### Exact Matching
+
+```{r}
+SevereDisease_OrNeg_Q42021_Exact <- matchit(Booster1 ~ AgeCategory + Sex + BMI_category + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter,
+                           data = TN_Q42021_SevereDisease_OrNeg,
+                           method = "exact") %>%
+  match.data()
+```
+
+```{r}
+PositiveOnly_Q42021_Exact <- matchit(Booster1 ~ AgeCategory + Sex + BMI_category + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter,
+                           data = TN_Q42021_PositiveOnly,
+                           method = "exact") %>%
+  match.data()
+```
+
+
+#### Propensity Caliper Matching
+
+```{r}
+SevereDisease_OrNeg_Q42021_PropensityCaliper <- matchit(
+  Booster1 ~ AgeCategory + Sex + BMI_category + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter,
+  data = TN_Q42021_SevereDisease_OrNeg,
+  method = "nearest",
+  distance = "glm",
+  caliper = 0.2,
+  std.caliper = TRUE
+) %>%
+  match.data() %>%
+  mutate(ipw = ifelse(Booster == 1, yes = 1 / distance, no = 1 / (1 - distance)))
+```
+
+```{r}
+PositiveOnly_Q42021_PropensityCaliper <- matchit(
+  Booster1 ~ AgeCategory + Sex + BMI_category + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter,
+  data = TN_Q42021_PositiveOnly,
+  method = "nearest",
+  distance = "glm",
+  caliper = 0.2,
+  std.caliper = TRUE
+) %>%
+  match.data() %>%
+  mutate(ipw = ifelse(Booster == 1, yes = 1 / distance, no = 1 / (1 - distance)))
+```
+
+### Control Group 1
+
+```{r}
+# Cases are severe disease, controls are no severe disease (negative or positive)
+summary(glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q42021))
+```
+
+#### Exact Matching
+
+```{r}
+summary(clogit(SevereDisease ~ Booster1 + strata(subclass), data = TN_Q42021_Exact))
+```
+
+#### Propensity Caliper
+
+```{r}
+summary(clogit(SevereDisease ~ Booster1 + strata(subclass), data = TN_Q42021_PropensityCaliper))
+```
+
+#### Propensity Adjustment
+
+```{r}
+summary(glm(SevereDisease ~ Booster1 + Propensity_ForBooster, family = binomial(link = 'logit'), data = TN_Q42021_PropensityScores))
+```
+
+```{r}
+# Fully Adjusted
+summary(glm(SevereDisease ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q42021_PropensityScores))
+```
+
+#### IPW
+
+```{r}
+summary(glm(SevereDisease ~ Booster1 + Propensity_ForBooster, 
+            family = binomial(link = 'logit'), 
+            weights = IPW_ForBooster,
+            data = TN_Q42021_PropensityScores))
+```
+
+```{r}
+# Fully Adjusted
+summary(glm(SevereDisease ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, 
+            family = binomial(link = 'logit'),
+            weights = IPW_ForBooster,
+            data = TN_Q42021_PropensityScores))
+```
+
+#### Extraction
+
+```{r}
+forest_control_grp1 <- rbind.data.frame(
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42021)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q42021)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42021_Exact)),
+  mod_extraction(clogit(SevereDisease ~ Booster1 + strata(subclass), data = TN_Q42021_Exact)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42021_PropensityCaliper)),
+  mod_extraction(clogit(SevereDisease ~ Booster1 + strata(subclass), data = TN_Q42021_PropensityCaliper)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Propensity_ForBooster, family = binomial(link = 'logit'), data = TN_Q42021_PropensityScores)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q42021_PropensityScores)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Propensity_ForBooster, 
+            family = binomial(link = 'logit'), 
+            weights = IPW_ForBooster,
+            data = TN_Q42021_PropensityScores)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, 
+            family = binomial(link = 'logit'),
+            weights = IPW_ForBooster,
+            data = TN_Q42021_PropensityScores))
+)
+```
+
+### Control Group 2
+
+```{r}
+summary(glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q42021_SevereDisease_OrNeg))
+```
+
+#### Exact Matching
+
+```{r}
+summary(clogit(SevereDisease ~ Booster1 + strata(subclass), data = SevereDisease_OrNeg_Q42021_Exact))
+```
+
+#### Propensity Caliper
+
+```{r}
+summary(clogit(SevereDisease ~ Booster1 + strata(subclass), data = SevereDisease_OrNeg_Q42021_PropensityCaliper))
+```
+
+#### Propensity Adjustment
+
+```{r}
+summary(glm(SevereDisease ~ Booster1 + Propensity_ForBooster, family = binomial(link = 'logit'), data = SevereDisease_OrNeg_Q42021_PropensityScores))
+```
+
+```{r}
+# Fully Adjusted
+summary(glm(SevereDisease ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = SevereDisease_OrNeg_Q42021_PropensityScores))
+```
+
+#### IPW
+
+```{r}
+summary(glm(SevereDisease ~ Booster1 + Propensity_ForBooster, 
+            family = binomial(link = 'logit'), 
+            weights = IPW_ForBooster,
+            data = SevereDisease_OrNeg_Q42021_PropensityScores))
+```
+
+```{r}
+# Fully Adjusted
+summary(glm(SevereDisease ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, 
+            family = binomial(link = 'logit'),
+            weights = IPW_ForBooster,
+            data = SevereDisease_OrNeg_Q42021_PropensityScores))
+```
+
+#### Extraction
+
+```{r}
+forest_control_grp2 <- rbind.data.frame(
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42021_SevereDisease_OrNeg)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q42021_SevereDisease_OrNeg)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = SevereDisease_OrNeg_Q42021_Exact)),
+  mod_extraction(clogit(SevereDisease ~ Booster1 + strata(subclass), data = SevereDisease_OrNeg_Q42021_Exact)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = SevereDisease_OrNeg_Q42021_PropensityCaliper)),
+  mod_extraction(clogit(SevereDisease ~ Booster1 + strata(subclass), data = SevereDisease_OrNeg_Q42021_PropensityCaliper)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Propensity_ForBooster, family = binomial(link = 'logit'), data = SevereDisease_OrNeg_Q42021_PropensityScores)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = SevereDisease_OrNeg_Q42021_PropensityScores)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Propensity_ForBooster, 
+            family = binomial(link = 'logit'), 
+            weights = IPW_ForBooster,
+            data = SevereDisease_OrNeg_Q42021_PropensityScores)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, 
+            family = binomial(link = 'logit'),
+            weights = IPW_ForBooster,
+            data = SevereDisease_OrNeg_Q42021_PropensityScores))
+)
+```
+
+### Control Group 3
+
+
+```{r}
+summary(glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q42021_PositiveOnly))
+or_model_summary(glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q42021_PositiveOnly))
+vcov(glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q42021_PositiveOnly))
+```
+
+```{r}
+control_grp3_extraction(infection_mod = glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q42021),
+                        severe_mod = glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q42021_PositiveOnly))
+```
+
+```{r}
+# TN_Q42021_PositiveOnly
+forest_control_grp3 <- rbind.data.frame(
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42021),
+    glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42021_PositiveOnly)
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q42021),
+    glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q42021_PositiveOnly)
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42021_Exact),
+    glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = PositiveOnly_Q42021_Exact)
+  ),
+  control_grp3_extraction(
+    clogit(Test_Result ~ Booster1 + strata(subclass), data = TN_Q42021_Exact),
+    clogit(SevereDisease ~ Booster1 + strata(subclass), data = PositiveOnly_Q42021_Exact),
+    clogit = TRUE
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42021_PropensityCaliper),
+    glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = PositiveOnly_Q42021_PropensityCaliper)
+  ),
+  control_grp3_extraction(
+    clogit(Test_Result ~ Booster1 + strata(subclass), data = TN_Q42021_PropensityCaliper),
+    clogit(SevereDisease ~ Booster1 + strata(subclass), data = PositiveOnly_Q42021_PropensityCaliper),
+    clogit = TRUE
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1 + Propensity_ForBooster, family = binomial(link = 'logit'), data = TN_Q42021_PropensityScores),
+    glm(SevereDisease ~ Booster1 + Propensity_ForBooster, family = binomial(link = 'logit'), data = PositiveOnly_Q42021_PropensityScores)
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q42021_PropensityScores),
+    glm(SevereDisease ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = PositiveOnly_Q42021_PropensityScores)
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1 + Propensity_ForBooster, 
+            family = binomial(link = 'logit'), 
+            weights = IPW_ForBooster,
+            data = TN_Q42021_PropensityScores),
+    glm(SevereDisease ~ Booster1 + Propensity_ForBooster, 
+            family = binomial(link = 'logit'), 
+            weights = IPW_ForBooster,
+            data = PositiveOnly_Q42021_PropensityScores)
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, 
+            family = binomial(link = 'logit'),
+            weights = IPW_ForBooster,
+            data = TN_Q42021_PropensityScores),
+    glm(SevereDisease ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, 
+            family = binomial(link = 'logit'),
+            weights = IPW_ForBooster,
+            data = PositiveOnly_Q42021_PropensityScores)
+  )
+  
+)
+
+```
+
+## Second Booster
+
+```{r}
+TN_Q22022 <- table1in %>%
+#  filter(FullyVaccinated == 1 | Booster1 == 1) %>%
+  filter(PastCOVIDInfection == "No") %>%
+  filter(Quarter %in% c("2022/Q2", "2022/Q3", "2022/Q4")) %>%
+  filter(!is.na(Booster1) & !is.na(Age) & !is.na(Sex) & !is.na(BMI) & !is.na(BMI_category) & !is.na(RaceEthnicity4) & !is.na(NDIwithoutProportionBlack) & !is.na(PersonsPerSquareMile) & !is.na(HealthCareWorker) & !is.na(index) & !is.na(PrimaryCareMM_YN) & !is.na(negativeTests_Cat) & !is.na(Quarter)) 
+
+TN_Q32022 <- table1in %>%
+#  filter(FullyVaccinated == 1 | Booster1 == 1) %>%
+  filter(PastCOVIDInfection == "No") %>%
+  filter(Quarter %in% c("2022/Q3", "2022/Q4")) %>%
+  filter(!is.na(Booster1) & !is.na(Age) & !is.na(Sex) & !is.na(BMI) & !is.na(BMI_category) & !is.na(RaceEthnicity4) & !is.na(NDIwithoutProportionBlack) & !is.na(PersonsPerSquareMile) & !is.na(HealthCareWorker) & !is.na(index) & !is.na(PrimaryCareMM_YN) & !is.na(negativeTests_Cat) & !is.na(Quarter))
+
+TN_Q42022 <- table1in %>%
+#  filter(FullyVaccinated == 1 | Booster1 == 1) %>%
+  filter(PastCOVIDInfection == "No") %>%
+  filter(Quarter %in% c("2022/Q4")) %>%
+  filter(!is.na(Booster1) & !is.na(Age) & !is.na(Sex) & !is.na(BMI) & !is.na(BMI_category) & !is.na(RaceEthnicity4) & !is.na(NDIwithoutProportionBlack) & !is.na(PersonsPerSquareMile) & !is.na(HealthCareWorker) & !is.na(index) & !is.na(PrimaryCareMM_YN) & !is.na(negativeTests_Cat) & !is.na(Quarter))
+
+TN_Q22022_Only <- TN_Q22022 %>%
+  filter(Quarter == "2022/Q2")
+
+TN_Q32022_Only <- TN_Q32022 %>%
+  filter(Quarter == "2022/Q3")
+
+TN_Q42022_Only <- TN_Q42022
+```
+
+
+### Infection Non-Matched
+
+```{r}
+forest_study_periods <- rbind.data.frame(
+  TN_mod_extraction(glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q22022)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q22022)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q32022)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q32022)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42022)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat, family = binomial(link = 'logit'), data = TN_Q42022))
+)
+```
+
+```{r}
+forest_quarter_only <- rbind.data.frame(
+  TN_mod_extraction(glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q22022_Only)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat, family = binomial(link = 'logit'), data = TN_Q22022_Only)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q32022_Only)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat, family = binomial(link = 'logit'), data = TN_Q32022_Only)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42022_Only)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat, family = binomial(link = 'logit'), data = TN_Q42022_Only))
+)
+```
+
+### Complete Cases Datasets
+
+```{r}
+TN_Q22022_CC <- TN_Q22022 %>%
+  filter(!is.na(Booster1) & !is.na(Age) & !is.na(Sex) & !is.na(BMI) & !is.na(BMI_category) & !is.na(RaceEthnicity4) & !is.na(NDIwithoutProportionBlack) & !is.na(PersonsPerSquareMile) & !is.na(HealthCareWorker) & !is.na(index) & !is.na(PrimaryCareMM_YN) & !is.na(negativeTests_Cat) & !is.na(Quarter))
+```
+
+### Propensity Score Generation
+
+```{r}
+TN_Propensity_ForBooster_Mod_Q22022 <- glm(Booster1 ~ Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q22022_CC)
+
+TN_Q22022_PropensityScores <- TN_Q22022_CC %>%
+  mutate(Propensity_ForBooster = predict(TN_Propensity_ForBooster_Mod_Q22022, type = "response")) %>%
+  mutate(IPW_ForBooster = ifelse(Booster == 1, yes = 1 / Propensity_ForBooster, no = 1 / (1 - Propensity_ForBooster)))
+```
+
+
+### Exact Matching
+
+```{r}
+TN_Q22022_Exact <- matchit(Booster1 ~ AgeCategory + Sex + BMI_category + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter,
+                           data = TN_Q22022_CC,
+                           method = "exact") %>%
+  match.data()
+```
+
+
+### Propensity Caliper Matching
+
+```{r}
+TN_Q22022_PropensityCaliper <- matchit(
+  Booster1 ~ AgeCategory + Sex + BMI_category + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter,
+  data = TN_Q22022_CC,
+  method = "nearest",
+  distance = "glm",
+  caliper = 0.2,
+  std.caliper = TRUE
+) %>%
+  match.data() %>%
+  mutate(ipw = ifelse(Booster == 1, yes = 1 / distance, no = 1 / (1 - distance)))
+```
+
+### Infection Matching Extraction
+
+```{r}
+forest_TN_Q22022_matched <- rbind.data.frame(
+  TN_mod_extraction(glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q22022)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q22022)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q22022_Exact)),
+  mod_extraction(clogit(Test_Result ~ Booster1 + strata(subclass), data = TN_Q22022_Exact)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q22022_PropensityCaliper)),
+  mod_extraction(clogit(Test_Result ~ Booster1 + strata(subclass), data = TN_Q22022_PropensityCaliper)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Propensity_ForBooster, family = binomial(link = 'logit'), data = TN_Q22022_PropensityScores)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q22022_PropensityScores)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Propensity_ForBooster, 
+            family = binomial(link = 'logit'), 
+            weights = IPW_ForBooster,
+            data = TN_Q22022_PropensityScores)),
+  TN_mod_extraction(glm(Test_Result ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, 
+            family = binomial(link = 'logit'),
+            weights = IPW_ForBooster,
+            data = TN_Q22022_PropensityScores))
+)
+```
+
+### Severe Disease
+
+```{r}
+forest_severe_study_periods <- rbind.data.frame(
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q22022)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q22022)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q32022)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q32022)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42022)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat, family = binomial(link = 'logit'), data = TN_Q42022)),
+  
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q22022_SevereDisease_OrNeg)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q22022_SevereDisease_OrNeg)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q32022_SevereDisease_OrNeg)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q32022_SevereDisease_OrNeg)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42022_SevereDisease_OrNeg)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat, family = binomial(link = 'logit'), data = TN_Q42022_SevereDisease_OrNeg)),
+  
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q22022),
+    glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q22022_PositiveOnly)
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q22022),
+    glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q22022_PositiveOnly)
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q32022),
+    glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q32022_PositiveOnly)
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q32022),
+    glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q32022_PositiveOnly)
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42022),
+    glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q42022_PositiveOnly)
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat, family = binomial(link = 'logit'), data = TN_Q42022),
+    glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat, family = binomial(link = 'logit'), data = TN_Q42022_PositiveOnly)
+  )
+)
+```
+
+#### Datasets
+
+```{r}
+TN_Q22022_CC <- TN_Q22022 %>%
+  filter(!is.na(Booster1) & !is.na(Age) & !is.na(Sex) & !is.na(BMI) & !is.na(BMI_category) & !is.na(RaceEthnicity4) & !is.na(NDIwithoutProportionBlack) & !is.na(PersonsPerSquareMile) & !is.na(HealthCareWorker) & !is.na(index) & !is.na(PrimaryCareMM_YN) & !is.na(negativeTests_Cat) & !is.na(Quarter))
+```
+
+```{r}
+# With only severe disease and test negatives
+TN_Q22022_SevereDisease_OrNeg <- TN_Q22022_CC %>%
+  filter(SevereDisease == 1 | Test_Result == 0)
+
+# With only test positives
+TN_Q22022_PositiveOnly <- TN_Q22022_CC %>%
+  filter(Test_Result == 1)
+```
+
+#### Propensity Score Generation
+
+```{r}
+SevereDisease_OrNeg_Propensity_Q22022_ForBooster_Mod <- glm(Booster1 ~ Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q22022_SevereDisease_OrNeg)
+
+SevereDisease_OrNeg_Q22022_PropensityScores <- TN_Q22022_SevereDisease_OrNeg %>%
+  mutate(Propensity_ForBooster = predict(SevereDisease_OrNeg_Propensity_Q22022_ForBooster_Mod, type = "response")) %>%
+  mutate(IPW_ForBooster = ifelse(Booster == 1, yes = 1 / Propensity_ForBooster, no = 1 / (1 - Propensity_ForBooster)))
+```
+
+```{r}
+PositiveOnly_Propensity_Q22022_ForBooster_Mod <- glm(Booster1 ~ Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q22022_PositiveOnly)
+
+PositiveOnly_Q22022_PropensityScores <- TN_Q22022_PositiveOnly %>%
+  mutate(Propensity_ForBooster = predict(PositiveOnly_Propensity_Q22022_ForBooster_Mod, type = "response")) %>%
+  mutate(IPW_ForBooster = ifelse(Booster == 1, yes = 1 / Propensity_ForBooster, no = 1 / (1 - Propensity_ForBooster)))
+```
+
+#### Exact Matching
+
+```{r}
+SevereDisease_OrNeg_Q22022_Exact <- matchit(Booster1 ~ AgeCategory + Sex + BMI_category + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter,
+                           data = TN_Q22022_SevereDisease_OrNeg,
+                           method = "exact") %>%
+  match.data()
+```
+
+```{r}
+PositiveOnly_Q22022_Exact <- matchit(Booster1 ~ AgeCategory + Sex + BMI_category + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter,
+                           data = TN_Q22022_PositiveOnly,
+                           method = "exact") %>%
+  match.data()
+```
+
+
+#### Propensity Caliper Matching
+
+```{r}
+SevereDisease_OrNeg_Q22022_PropensityCaliper <- matchit(
+  Booster1 ~ AgeCategory + Sex + BMI_category + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter,
+  data = TN_Q22022_SevereDisease_OrNeg,
+  method = "nearest",
+  distance = "glm",
+  caliper = 0.2,
+  std.caliper = TRUE
+) %>%
+  match.data() %>%
+  mutate(ipw = ifelse(Booster == 1, yes = 1 / distance, no = 1 / (1 - distance)))
+```
+
+```{r}
+PositiveOnly_Q22022_PropensityCaliper <- matchit(
+  Booster1 ~ AgeCategory + Sex + BMI_category + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter,
+  data = TN_Q22022_PositiveOnly,
+  method = "nearest",
+  distance = "glm",
+  caliper = 0.2,
+  std.caliper = TRUE
+) %>%
+  match.data() %>%
+  mutate(ipw = ifelse(Booster == 1, yes = 1 / distance, no = 1 / (1 - distance)))
+```
+
+#### Extraction
+
+```{r}
+forest_control_grp1 <- rbind.data.frame(
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q22022)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q22022)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q22022_Exact)),
+  mod_extraction(clogit(SevereDisease ~ Booster1 + strata(subclass), data = TN_Q22022_Exact)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q22022_PropensityCaliper)),
+  mod_extraction(clogit(SevereDisease ~ Booster1 + strata(subclass), data = TN_Q22022_PropensityCaliper)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Propensity_ForBooster, family = binomial(link = 'logit'), data = TN_Q22022_PropensityScores)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q22022_PropensityScores)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Propensity_ForBooster, 
+            family = binomial(link = 'logit'), 
+            weights = IPW_ForBooster,
+            data = TN_Q22022_PropensityScores)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, 
+            family = binomial(link = 'logit'),
+            weights = IPW_ForBooster,
+            data = TN_Q22022_PropensityScores))
+)
+```
+
+```{r}
+forest_control_grp2 <- rbind.data.frame(
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q22022_SevereDisease_OrNeg)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q22022_SevereDisease_OrNeg)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = SevereDisease_OrNeg_Q22022_Exact)),
+  mod_extraction(clogit(SevereDisease ~ Booster1 + strata(subclass), data = SevereDisease_OrNeg_Q22022_Exact)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = SevereDisease_OrNeg_Q22022_PropensityCaliper)),
+  mod_extraction(clogit(SevereDisease ~ Booster1 + strata(subclass), data = SevereDisease_OrNeg_Q22022_PropensityCaliper)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Propensity_ForBooster, family = binomial(link = 'logit'), data = SevereDisease_OrNeg_Q22022_PropensityScores)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = SevereDisease_OrNeg_Q22022_PropensityScores)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Propensity_ForBooster, 
+            family = binomial(link = 'logit'), 
+            weights = IPW_ForBooster,
+            data = SevereDisease_OrNeg_Q22022_PropensityScores)),
+  TN_mod_extraction(glm(SevereDisease ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, 
+            family = binomial(link = 'logit'),
+            weights = IPW_ForBooster,
+            data = SevereDisease_OrNeg_Q22022_PropensityScores))
+)
+```
+
+```{r}
+forest_control_grp3 <- rbind.data.frame(
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q22022),
+    glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = TN_Q22022_PositiveOnly)
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q22022),
+    glm(SevereDisease ~ Booster1 + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q22022_PositiveOnly)
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q22022_Exact),
+    glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = PositiveOnly_Q22022_Exact)
+  ),
+  control_grp3_extraction(
+    clogit(Test_Result ~ Booster1 + strata(subclass), data = TN_Q22022_Exact),
+    clogit(SevereDisease ~ Booster1 + strata(subclass), data = PositiveOnly_Q22022_Exact),
+    clogit = TRUE
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1, family = binomial(link = 'logit'), data = TN_Q22022_PropensityCaliper),
+    glm(SevereDisease ~ Booster1, family = binomial(link = 'logit'), data = PositiveOnly_Q22022_PropensityCaliper)
+  ),
+  control_grp3_extraction(
+    clogit(Test_Result ~ Booster1 + strata(subclass), data = TN_Q22022_PropensityCaliper),
+    clogit(SevereDisease ~ Booster1 + strata(subclass), data = PositiveOnly_Q22022_PropensityCaliper),
+    clogit = TRUE
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1 + Propensity_ForBooster, family = binomial(link = 'logit'), data = TN_Q22022_PropensityScores),
+    glm(SevereDisease ~ Booster1 + Propensity_ForBooster, family = binomial(link = 'logit'), data = PositiveOnly_Q22022_PropensityScores)
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = TN_Q22022_PropensityScores),
+    glm(SevereDisease ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, family = binomial(link = 'logit'), data = PositiveOnly_Q22022_PropensityScores)
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1 + Propensity_ForBooster, 
+            family = binomial(link = 'logit'), 
+            weights = IPW_ForBooster,
+            data = TN_Q22022_PropensityScores),
+    glm(SevereDisease ~ Booster1 + Propensity_ForBooster, 
+            family = binomial(link = 'logit'), 
+            weights = IPW_ForBooster,
+            data = PositiveOnly_Q22022_PropensityScores)
+  ),
+  control_grp3_extraction(
+    glm(Test_Result ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, 
+            family = binomial(link = 'logit'),
+            weights = IPW_ForBooster,
+            data = TN_Q22022_PropensityScores),
+    glm(SevereDisease ~ Booster1 + Propensity_ForBooster + Age + Sex + BMI + RaceEthnicity4 + NDIwithoutProportionBlack + PersonsPerSquareMile + HealthCareWorker + index + PrimaryCareMM_YN + negativeTests_Cat + Quarter, 
+            family = binomial(link = 'logit'),
+            weights = IPW_ForBooster,
+            data = PositiveOnly_Q22022_PropensityScores)
+  )
+  
+)
+
+```
+
