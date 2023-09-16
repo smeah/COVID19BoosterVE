@@ -95,7 +95,8 @@ ForestLines <- function(data, var = "Start_Quarter", linetype = 2){
 ```
 
 ```{r}
-pal <- c("blue", "red", "#009b00", "purple")
+#pal <- c("blue", "red", "#009b00", "purple")
+pal <- c("blue", "red", "orange", "purple")
 ```
 
 ```{r}
