@@ -8,4 +8,4 @@ R code examples of the VE methods used in the paper can be found in the 'Analysi
 Actual R code used in the Michigan Medicine data analysis can be found in the 'MM Analysis Code' folder.  
 Note that the actual data is not available to the public for privacy reasons.  Thus, several lines of code loading the data with their specific file paths are also omitted.
 
-Note that the repository as of the final commit 7-17-2023 matches the materials used in the MedRxiv preprint, there have been slight edits to figures and associated code since (but not to the core MM analysis or literature review results CSVs).
+Note that the repository as of the final commit 7-17-2023 matches the materials used in the MedRxiv preprint, there have been slight edits to figures and associated code since (but not to the core MM analysis or literature review data files).
