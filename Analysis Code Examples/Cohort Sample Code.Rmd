@@ -136,7 +136,7 @@ paste("VE =", 1 - exp(coef(mod_exact_strat)["Booster1"]))
 
 ```{r}
 # Logistic model generating propensity score by predicting exposure (vaccination)
-# Can similarly be done to generate a propensity for testing score by replacing `Booster` with testing variable
+# Can similarly be done to generate a propensity for testing score by replacing 'Booster' with testing variable
 propensity_boosting_mod <- glm(Booster ~ Covariate_Continuous_Binned + Covariate_Categorical + Covariate_Binary, 
                                data = data, 
                                family = "binomial")
@@ -160,7 +160,7 @@ data_prop_match <- matchit(Booster ~ Covariate_Continuous + Covariate_Categorica
                              distance = "glm",
                              caliper = 0.2, # Specify caliper of 0.2
                              std.caliper = TRUE) %>% # Specify that caliper is based on standard deviation of propensity scores
-  match.data() %>% # This function call is necessary for a dataframe to be output\
+  match.data() %>% # This function call is necessary for a dataframe to be output
   mutate(ipw = ifelse(Booster == 1, yes = 1 / distance, no = 1 / (1 - distance))) # Can also generate IPW
 # Matching strata of observations are denoted by new 'subclass' column in dataframe
 ```
