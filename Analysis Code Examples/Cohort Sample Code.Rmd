@@ -136,6 +136,7 @@ paste("VE =", 1 - exp(coef(mod_exact_strat)["Booster1"]))
 
 ```{r}
 # Logistic model generating propensity score by predicting exposure (vaccination)
+# Can similarly be done to generate a propensity for testing score by replacing `Booster` with testing variable
 propensity_boosting_mod <- glm(Booster ~ Covariate_Continuous_Binned + Covariate_Categorical + Covariate_Binary, 
                                data = data, 
                                family = "binomial")
