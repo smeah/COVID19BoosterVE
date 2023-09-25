@@ -1,0 +1,59 @@
+Study,InfectionVE,InfectionCI_Lower,InfectionCI_Upper,HospitalVE,HospitalCI_Lower,HospitalCI_Upper,DeathVE,DeathCI_Lower,DeathCI_Upper,Published,Start,End,Country,Design,Symptomatic,PrimarySeries,Booster
+"Bar-On et al., 2021",0.912,0.904,0.919,0.949,0.922,0.966,,,,"October 7, 2021",July 2021,Aug 2021,Israel,C,0,mRNA,mRNA
+"Barda et al., 2021",0.88,0.87,0.9,0.93,0.88,0.97,0.81,0.59,0.97,"December 4, 2021",July 2021,Sep 2021,Israel,MC,0,mRNA,mRNA
+"Arbel et al., 2021",,,,,,,0.9,0.86,0.93,"December 23, 2021",August 2021,Sep 2021,Israel,C,0,mRNA,mRNA
+"Spitzer et al., 2022",0.93,0.8,0.98,,,,,,,"January 10, 2022",Aug 2021,Sep 2021,Israel,C,0,mRNA,mRNA
+"Saciuk et al., 2021",0.926,0.922,0.929,,,,,,,"November 2, 2021",August 2021,Oct 2021,Israel,MC,0,mRNA,mRNA
+"Andrews et al., 2021",0.844,0.828,0.858,,,,,,,"November 15, 2021",Sep 2021,Oct 2021,UK,TN,1,Multiple,mRNA
+"Amir et al., 2022",0.73,0.63,0.81,,,,,,,"April 13, 2022",Sep 2021,Oct 2021,Israel,C,0,mRNA,mRNA
+"Muhsen et al., 2022",0.89,0.86,0.93,0.93,0.85,0.97,0.96,0.84,0.991,"July 1, 2022",Aug 2021,Oct 2021,Israel,C,0,mRNA,mRNA
+"Sharma et al., 2021",0.457,0.379,0.525,0.448,0.266,0.584,,,,"November 30, 2021",Jan 2021,Nov 2021,USA,MC,0,mRNA,mRNA
+"Mattiuzzi and Lippi, 2022",0.65,0.62,0.68,0.69,0.56,0.78,0.97,0.56,1,"January 3, 2022",Dec 2020,Nov 2021,Italy,C,0,Multiple,Multiple
+"McConeghy et al., 2022 (S1)",0.504,0.294,0.647,0.82,0.555,0.94,,,,"January 28, 2022",Sep 2021,Dec 2021,USA,C,0,mRNA,mRNA
+"McConeghy et al., 2022 (S2)",0.58,0.323,0.778,0.458,-0.155,0.791,,,,"January 28, 2022",Sep 2021,Dec 2021,USA,C,0,mRNA,mRNA
+"Mehta et al., 2022",,,,0.81,0.8,0.82,,,,"July 11, 2022",Dec 2020,Dec 2021,USA,MC,0,mRNA,mRNA
+"Tartof et al., 2022",0.75,0.71,0.78,0.7,0.48,0.83,,,,"February 14, 2022",Dec 2020,Dec 2021,USA,C,0,mRNA,mRNA
+"Sheikh et al., 2022",0.57,0.54,0.6,,,,,,,"April 22, 2022",Nov 2021,Dec 2021,UK,TN,1,Multiple,mRNA
+"Butt et al, 2022",0.19,0.17,0.22,0.52,0.46,0.57,,,,"May 3, 2022",Sep 2021,Dec 2021,USA,MC,0,mRNA,mRNA
+"Marra et al., 2022",0.605,0.449,0.724,,,,,,,"May 27, 2022",Jan 2021,Dec 2021,Brazil,C,1,non-mRNA,mRNA
+"Wan et al., 2022",0.52,0.37,0.64,,,,,,,"March 9, 2022",Dec 2021,Dec 2021,USA,C,0,Multiple,Multiple
+"Hulme et al., 2022",0.507,0.501,0.513,0.801,0.783,0.818,0.885,0.85,0.911,"June 6, 2022",Sep 2021,Dec 2021,UK,MC,0,Multiple,mRNA
+"Accorsi et al., 2022 (Delta)",0.84,0.83,0.86,,,,,,,"January 21, 2022",Dec 2021,Jan 2022,USA,TN,1,mRNA,mRNA
+"Accorsi et al., 2022 (Omicron)",0.65,0.63,0.66,,,,,,,"January 21, 2022",Dec 2021,Jan 2022,USA,TN,1,mRNA,mRNA
+"Abu-Raddad et al., 2022 (Delta)",0.861,0.673,0.941,,,,,,,"January 24, 2022",Dec 2021,Jan 2022,Qatar,MC,1,mRNA,mRNA
+"Abu-Raddad et al., 2022 (Omicron)",0.494,0.471,0.516,,,,,,,"January 24, 2022",Dec 2021,Jan 2022,Qatar,MC,1,mRNA,mRNA
+"Tai et al., 2022",0.643,0.565,0.697,,,,,,,"February 26, 2022",Dec 2021,Jan 2022,USA,C,0,Multiple,mRNA
+"Lind et al., 2022",0.49,0.44,0.54,,,,,,,"April 25, 2022",Nov 2021,Jan 2022,USA,TN,0,mRNA,mRNA
+"Sonmezer et al., 2022 (Pfizer)",0.8727,0.8421,0.8924,,,,,,,"July 18, 2022",Jan 2021,Jan 2022,Turkey,C,1,non-mRNA,mRNA
+"Sonmezer et al., 2022 (Sinovac)",0.5824,0.4343,0.6917,,,,,,,"July 18, 2022",Jan 2021,Jan 2022,Turkey,C,1,non-mRNA,non-mRNA
+"Roblotti et al., 2022",0.332,0.287,0.377,,,,,,,"August 3, 2022",Dec 2021,Jan 2022,USA,C,0,mRNA,mRNA
+"Florea et al., 2022",0.613,0.605,0.622,0.89,0.862,0.912,0.96,0.68,0.995,"September 22, 2022",Oct 2021,Jan 2022,USA,MC,0,mRNA,mRNA
+"Robliotti et al., 2022",0.333,0.287,0.377,,,,,,,"December 28, 2022",Dec 2021,Jan 2022,USA,C,0,mRNA,mRNA
+"Andersson et al., 2022",0.332,-0.068,0.732,,,,,,,"November 29, 2022",Dec 2020,Feb 2022,Denmark,MC,0,mRNA,mRNA
+"Andersson et al., 2022",0.516,-0.499,1,,,,,,,"November 29, 2022",Dec 2020,Feb 2022,Denmark,MC,0,non-mRNA,mRNA
+"Andersson et al., 2022",0.442,0.345,0.538,,,,,,,"November 29, 2022",Dec 2020,Feb 2022,Finland,MC,0,mRNA,mRNA
+"Andersson et al., 2022",0.628,0.529,0.727,0.955,0.885,1,,,,"November 29, 2022",Dec 2020,Feb 2022,Finland,MC,0,non-mRNA,mRNA
+"Andersson et al., 2022",0.623,0.595,0.65,0.885,0.708,1,,,,"November 29, 2022",Dec 2020,Feb 2022,Norway,MC,0,mRNA,mRNA
+"Andersson et al., 2022",-0.086,-0.768,0.626,,,,,,,"November 29, 2022",Dec 2020,Feb 2022,Norway,MC,0,non-mRNA,mRNA
+"Andersson et al., 2022",0.202,0.143,0.261,0.896,0.797,0.996,,,,"November 29, 2022",Dec 2020,Feb 2022,Sweden,MC,0,mRNA,mRNA
+"Andersson et al., 2022",0.263,0.202,0.325,0.878,0.809,0.947,,,,"November 29, 2022",Dec 2020,Feb 2022,Sweden,MC,0,non-mRNA,mRNA
+"Suah et al., 2022",0.511,0.503,0.519,,,,,,,"May 23, 2022",Oct 2021,Feb 2022,Malaysia,TN,0,mRNA,mRNA
+"Suah et al., 2022",0.53,0.516,0.543,,,,,,,"May 23, 2022",Oct 2021,Feb 2022,Malaysia,TN,0,non-mRNA,mRNA
+"Suah et al., 2022",0.301,0.284,0.318,,,,,,,"May 23, 2022",Oct 2021,Feb 2022,Malaysia,TN,0,non-mRNA,non-mRNA
+"Silva-Valencia et al., 2022",,,,,,,0.872,0.842,0.897,"October 26, 2022",Dec 2021,Feb 2022,Peru,MCC,0,Multiple,Multiple
+"Prasad et al., 2022",0.469,0.448,0.489,,,,,,,"May 6, 2022",Feb 2022,Mar 2022,USA,C,0,Multiple,Multiple
+"Ioannou et al., 2022",0.423,0.406,0.439,0.533,0.481,0.58,0.791,0.712,0.849,"June 16, 2022",Dec 2021,Mar 2022,USA,MC,0,mRNA,mRNA
+"Korves et al., 2022",0.54,0.38,0.66,,,,,,,"June 21, 2022",Sep 2021,Mar 2022,USA,C,0,mRNA,mRNA
+"Ng et al., 2022",,,,0.697,0.489,0.82,,,,"August 26, 2022",Oct 2021,Mar 2022,Singapore,C,0,non-mRNA,non-mRNA
+"Miyauchi et al., 2022 (BA.1)",0.54,0.18,0.75,,,,,,,"November 24, 2022",Jan 2022,Mar 2022,Japan,C,0,mRNA,mRNA
+"Richterman et al., 2022",0.5,0.42,0.56,,,,,,,"June 6, 2022",Jul 2021,Apr 2022,USA,TN,0,mRNA,mRNA
+"Miyauchi et al., 2022",0.51,0.12,0.73,,,,,,,"August 9, 2022",Jan 2022,Apr 2022,Japan,TN,0,mRNA,mRNA
+"Lind et al., 2022",0.46,0.41,0.51,,,,,,,"December 1, 2022",Nov 2021,Apr 2022,USA,TN,0,mRNA,mRNA
+"Sim et al., 2022",0.8,0.2,1,,,,,,,"October 28, 2022",Apr 2022,Jun 2022,Taiwan,C,0,Multiple,Multiple
+"Kislaya et al., 2022 (60-79yo)",,,,0.21,0.02,0.36,0.14,-0.05,0.3,"September 15, 2022",May 2022,July 2022,Portugal,C,0,Multiple,mRNA
+"Kislaya et al., 2022 (80+yo)",,,,0.16,0.01,0.28,0.13,0.01,0.24,"September 15, 2022",May 2022,July 2022,Portugal,C,0,Multiple,mRNA
+"Miyauchi et al., 2022 (BA.2)",0.5,0.18,0.69,,,,,,,"November 24, 2022",Jan 2022,Mar 2022,Japan,C,0,mRNA,mRNA
+"Saito et al., 2022",0.864,0.572,0.957,,,,,,,"November 12, 2022",May 2022,Jun 2022,Japan,C,0,mRNA,mRNA
+"Ridgway et al., 2022",,,,0.59,0.54,0.63,,,,"September 23, 2022",Oct 2021,Jul 2022,USA,MCC,0,mRNA,mRNA
+"Desai et al., 2022",-0.031,-0.429,0.231,0.438,0.02,0.678,,,,"December 28, 2022",Jan 2020,Jul 2022,USA,MC,0,mRNA,mRNA
+"Chemaitelly et al., 2022",0.411,0.4,0.421,0.805,0.557,0.914,,,,"November 15, 2022",Jan 2021,Oct 2022,Qatar,MC,0,mRNA,mRNA

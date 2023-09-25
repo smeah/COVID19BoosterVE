@@ -1,0 +1,7 @@
+Study,InfectionVE,InfectionCI_Lower,InfectionCI_Upper,HospitalVE,HospitalCI_Lower,HospitalCI_Upper,DeathVE,DeathCI_Lower,DeathCI_Upper,Published,Start,End,Country,Design,Symptomatic,PrimarySeries,Booster
+"Patalon et al., 2021 (short-term)",0.48,0.42,0.54,,,,,,,"August 31, 2021",Jan 2021,Aug 2021,Israel,TN,0,mRNA,mRNA
+"Andrews et al., 2021",0.683,0.655,0.708,,,,,,,"November 15, 2021",Sep 2021,Oct 2021,UK,TN,1,Multiple,mRNA
+"Patalon et al., 2021",0.58,0.56,0.61,0.91,0.86,0.94,,,,"November 30, 2021",Aug 2021,Oct 2021,Israel,TN,0,mRNA,mRNA
+"Andrews et al., 2022 (age 19-49)",0.779,0.762,0.795,,,,,,,"January 14, 2022",Sep 2021,Dec 2021,UK,TN,1,mRNA,mRNA
+"Andrews et al., 2022 (age 50+)",0.714,0.698,0.729,,,,,,,"January 14, 2022",Sep 2021,Dec 2021,UK,TN,1,mRNA,mRNA
+"Stirrup et al., 2022",0.52,0.27,0.69,0.73,-0.34,0.95,0.86,-0.04,0.98,"August 9, 2022",Dec 2021,Mar 2022,UK,C,0,Multiple,Multiple

@@ -1,0 +1,6 @@
+Study,InfectionVE,InfectionCI_Lower,InfectionCI_Upper,HospitalVE,HospitalCI_Lower,HospitalCI_Upper,DeathVE,DeathCI_Lower,DeathCI_Upper,Published,Start,End,Country,Design,Symptomatic,Booster1,Booster2
+Regev-Yochay et al. (87),0.431,0.066,0.654,,,,,,,"April 7, 2022",Jan 2022,Jan 2022,Israel,MC,1,mRNA,mRNA
+Magen et al. (60),0.55,0.53,0.58,0.68,0.59,0.74,0.74,0.5,0.9,"April 28, 2022",Jan 2022,Feb 2022,Israel,MC,1,mRNA,mRNA
+Grewal et al. (34),0.31,0.2,0.41,0.4,0.24,0.52,,,,"July 6, 2022",Dec 2021,Apr 2022,Canada,TN,1,mRNA,mRNA
+Grewal et al. (33),0.36,0.26,0.44,0.37,0.24,0.48,,,,"September 30, 2022",Dec 2021,August 2022,Canada,TN,1,mRNA,mRNA
+Tan et al. (97),0.19,0.17,0.2,0.51,0.48,0.54,0.61,0.53,0.68,"December 2, 2022",Feb 2022,Sep 2022,Singapore,C,1,mRNA,mRNA

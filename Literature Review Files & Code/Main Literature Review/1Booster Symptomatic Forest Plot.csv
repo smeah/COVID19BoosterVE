@@ -1,0 +1,12 @@
+Study,InfectionVE,InfectionCI_Lower,InfectionCI_Upper,HospitalVE,HospitalCI_Lower,HospitalCI_Upper,DeathVE,DeathCI_Lower,DeathCI_Upper,Published,Start,End,Country,Design,Symptomatic,PrimarySeries,Booster
+Barda et al. (22),0.91,0.89,0.92,0.93,0.88,0.97,0.81,0.59,0.97,"December 4, 2021",July 2021,Sep 2021,Israel,MC,1,mRNA,mRNA
+Andrews et al. (26),0.844,0.828,0.858,,,,,,,"November 15, 2021",Sep 2021,Oct 2021,UK,TN,1,Multiple,mRNA
+Sheikh et al. (72),0.57,0.54,0.6,,,,,,,"April 22, 2022",Nov 2021,Dec 2021,UK,TN,1,Multiple,mRNA
+Marra et al. (65),0.605,0.449,0.724,,,,,,,"May 27, 2022",Jan 2021,Dec 2021,Brazil,C,1,non-mRNA,mRNA
+Accorsi et al. (25) (Delta),0.84,0.83,0.86,,,,,,,"January 21, 2022",Dec 2021,Jan 2022,USA,TN,1,mRNA,mRNA
+Accorsi et al. (25) (Omicron),0.65,0.63,0.66,,,,,,,"January 21, 2022",Dec 2021,Jan 2022,USA,TN,1,mRNA,mRNA
+Abu-Raddad et al. (23) (Delta),0.861,0.673,0.941,,,,,,,"January 24, 2022",Dec 2021,Jan 2022,Qatar,MC,1,mRNA,mRNA
+Abu-Raddad et al. (23) (Omicron),0.494,0.471,0.516,,,,,,,"January 24, 2022",Dec 2021,Jan 2022,Qatar,MC,1,mRNA,mRNA
+Sonmezer et al. (85) (Pfizer),0.8727,0.8421,0.8924,,,,,,,"July 18, 2022",Jan 2021,Jan 2022,Turkey,C,1,non-mRNA,mRNA
+Sonmezer et al. (85) (Sinovac),0.5824,0.4343,0.6917,,,,,,,"July 18, 2022",Jan 2021,Jan 2022,Turkey,C,1,non-mRNA,non-mRNA
+Sim et al. (84),0.6,0.4,0.8,,,,,,,"October 28, 2022",Apr 2022,Jun 2022,Taiwan,C,1,Multiple,Multiple

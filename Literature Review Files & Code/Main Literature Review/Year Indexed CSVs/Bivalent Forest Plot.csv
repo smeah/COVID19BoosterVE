@@ -1,0 +1,13 @@
+Study,InfectionVE,InfectionCI_Lower,InfectionCI_Upper,HospitalVE,HospitalCI_Lower,HospitalCI_Upper,DeathVE,DeathCI_Lower,DeathCI_Upper,Published,Start,End,Country,Design,Symptomatic,PrimarySeries,Booster,Bivalent
+"Surie et al., 2022",,,,0.73,0.52,0.85,,,,,Sep 2022,Nov 2022,USA,TN,0,,,BA.4-5
+"Tenforde et al., 2023",,,,0.48,0.3,0.62,,,,,Sep 2022,Nov 2022,USA,TN,0,,,BA.4-5
+"Link-Gelles et al., 2022",0.43,0.39,0.46,,,,,,,,Sep 2022,Nov 2022,USA,TN,1,,,BA.4-5
+"Andersson et al., 2023",,,,0.74,0.686,0.794,0.801,0.72,0.882,,Jul 2022,Dec 2022,Nordics,MC,0,,,BA.1
+"Andersson et al., 2023",,,,0.805,0.695,0.915,0.778,0.483,1,,Jul 2022,Dec 2022,Nordics,MC,0,,,BA.4-5
+"Lin et al., 2023",,,,0.587,0.437,0.698,,,,,Sep 2022,Dec 2022,USA,C,0,,,BA.4-5
+"Fabiani et al., 2023",,,,0.594,0.551,0.633,,,,,Sep 2022,Dec 2022,Italy,C,0,,,BA.4-5
+"Huiberts et al., 2023",0.2,-0.07,0.4,,,,,,,,Sep 2022,Dec 2022,Holland,C,0,,,BA.1
+"Arbel et al., 2023",,,,0.81,0.57,0.92,0.86,-0.03,0.98,,Sep 2022,Dec 2022,Israel,C,0,,,BA.4-5
+"Poukka et al., 2023",,,,0.57,0.34,0.67,0.43,0.23,0.58,,Sep 2022,Jan 2023,Finland,C,0,,,Multiple
+"Link-Gelles et al., 2023",0.43,0.29,0.55,,,,,,,,Dec 2022,Jan 2023,USA,TN,1,,,BA.4-5
+"Shrestha et al., 2023",0.04,-0.12,0.18,,,,,,,,Sep 2022,Mar 2023,USA,C,0,,,BA.4-5
