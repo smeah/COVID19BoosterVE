@@ -1,4 +1,4 @@
-# Design and Analysis Heterogeneity in Observational Studies of COVID-19 Booster Effectiveness: A Review and Case Study --- Code Repository
+# Code Repository for "Design and Analysis Heterogeneity in Observational Studies of COVID-19 Booster Effectiveness: A Review and Case Study"
 
 [![DOI](https://zenodo.org/badge/652932099.svg)](https://zenodo.org/badge/latestdoi/652932099)
 
