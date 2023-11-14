@@ -8,6 +8,7 @@ output: pdf_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+library(scales)
 ```
 
 ```{r}
@@ -117,6 +118,7 @@ plot <- ggplot(articles_relevel, aes(x = date, fill = design)) +
   #scale_fill_manual(values = c("#D55E00", "#0072B2", "#009E73")) + # Colorblind website dark
   scale_fill_manual(values = c("#CC79A7", "#0072B2", "#009E73"), labels = c("Case-Control", "Cohort", "Test-Negative")) + # Colorblind website dark 2
   #scale_fill_manual(values = c("#E69F00", "#56B4E9", "#009E73")) + # Colorblind website light
+  #scale_fill_manual(values = c("blue", "red", "orange"), labels = c("Case-Control", "Cohort", "Test-Negative")) + # Rest of forest plot scheme
   theme_light()
 
 plot
@@ -139,11 +141,14 @@ articles2 <- read.csv("articles.csv") %>%
 articles2 <- articles2 %>%
   mutate(design = word(str_remove(articles2$notes, "RAYYAN-INCLUSION: \\{\"Sabir\"=>\"Included\"\\} \\| RAYYAN-LABELS: "))) %>%
   mutate(design = as.factor(design)) %>%
-  mutate(date = case_when(
+  mutate(date = factor(case_when(
     year == 2021 & month <= 6 ~ "2021H1",
     year == 2021 & month > 6 ~ "2021H2",
     year == 2022 & month <= 6 ~ "2022H1",
     year == 2022 & month > 6 ~ "2022H2"
+  ), 
+  levels = c("2021H1", "2021H2", "2022H1", "2022H2"),
+  labels = c("Jan 2021 - Jun 2021", "Jul 2021 - Dec 2021", "Jan 2022 - Jun 2022", "Jul 2022 - Dec 2022")
   )) %>%
   mutate(date = as.factor(date))
 
@@ -159,9 +164,14 @@ ggplot(articles2, aes(x = date, fill = design)) +
        fill = "Design") +
   geom_text(data = design_prop2, 
             aes(x = date, y = n, fill = design, group = design, label = scales::percent(prop)),
-            position = position_stack(vjust = 0.5)) +
-  scale_fill_brewer(palette="Set1", labels = c("Case-Control", "Cohort", "Test-Negative")) +
+            position = position_stack(vjust = 0.5), 
+            size = 2.5) +
+  #scale_fill_brewer(palette="Set1", labels = c("Case-Control", "Cohort", "Test-Negative")) +
+  scale_fill_manual(values = c("#CC79A7", "#0072B2", "#009E73"), labels = c("Case-Control", "Cohort", "Test-Negative")) + # Colorblind website dark 2
   theme_light()
+
+ggsave("./Figures/Publication_Designs_By_HalfYear_BothYears.pdf", width = 8, height = 5)
+ggsave("./Figures/Publication_Designs_By_HalfYear_BothYears.png", width = 8, height = 5)
 ```
 
 
