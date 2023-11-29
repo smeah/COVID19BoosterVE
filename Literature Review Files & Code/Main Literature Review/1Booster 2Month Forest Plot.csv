@@ -1,13 +1,13 @@
 Study,InfectionVE,InfectionCI_Lower,InfectionCI_Upper,HospitalVE,HospitalCI_Lower,HospitalCI_Upper,DeathVE,DeathCI_Lower,DeathCI_Upper,Published,Start,End,Country,Design,Symptomatic,PrimarySeries,Booster
-Patalon et al. (48),0.86,0.85,0.87,0.97,0.95,0.98,,,,"November 30, 2021",Aug 2021,Oct 2021,Israel,TN,0,mRNA,mRNA
+Patalon et al. (46),0.86,0.85,0.87,0.97,0.95,0.98,,,,"November 30, 2021",Aug 2021,Oct 2021,Israel,TN,0,mRNA,mRNA
 Lin et al. (24) (Sep-Nov '21),0.482,0.469,0.494,,,,,,,"October 11, 2022",Sep 2021,Nov 2021,USA,C,0,mRNA,mRNA
 Lin et al. (24) (Sep-Nov '21),,,,0.81,0.783,0.833,0.843,0.802,0.875,"October 11, 2022",Sep 2021,Nov 2021,USA,C,0,Multiple,Multiple
 Andrews et al. (67) (age 19-49),0.777,0.764,0.789,,,,,,,"January 14, 2022",Sep 2021,Dec 2021,UK,TN,1,mRNA,mRNA
 Andrews et al. (67) (age 50+),0.819,0.808,0.828,,,,,,,"January 14, 2022",Sep 2021,Dec 2021,UK,TN,1,mRNA,mRNA
 Hulme et al. (75),0.527,0.515,0.538,0.851,0.824,0.874,0.934,0.898,0.958,"June 6, 2022",Sep 2021,Dec 2021,UK,MC,0,Multiple,mRNA
-Patalon et al. (49),0.432,0.382,0.478,,,,,,,"February 26, 2022",Jan 2022,Jan 2022,Israel,MTN,0,mRNA,mRNA
+Patalon et al. (47),0.432,0.382,0.478,,,,,,,"February 26, 2022",Jan 2022,Jan 2022,Israel,MTN,0,mRNA,mRNA
 Florea et al. (79),0.538,0.52,0.556,0.891,0.849,0.921,,,,"September 22, 2022",Oct 2021,Jan 2022,USA,MC,0,mRNA,mRNA
-Ranzani et al. (40),0.343,0.334,0.352,0.722,0.699,0.744,,,,"April 1, 2022",Sep 2021,Mar 2022,Brazil,MTN,1,non-mRNA,mRNA
+Ranzani et al. (38),0.343,0.334,0.352,0.722,0.699,0.744,,,,"April 1, 2022",Sep 2021,Mar 2022,Brazil,MTN,1,non-mRNA,mRNA
 Stirrup et al. (86),0.72,0.62,0.8,0.81,0.48,0.93,0.88,0.66,0.96,"August 9, 2022",Dec 2021,Mar 2022,UK,C,0,Multiple,Multiple
 Ng et al. (76),0.317,0.3,0.334,0.852,0.802,0.889,,,,"August 26, 2022",Oct 2021,Mar 2022,Singapore,C,0,mRNA,mRNA
 Ng et al. (76),0.0726,0.0279,0.115,,,,,,,"August 26, 2022",Oct 2021,Mar 2022,Singapore,C,0,non-mRNA,non-mRNA
